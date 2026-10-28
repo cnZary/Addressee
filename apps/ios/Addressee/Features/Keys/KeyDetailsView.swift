@@ -40,6 +40,10 @@ struct KeyDetailsView: View {
                         Text("keys.details.secureEnclave.softwarePrimary")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                    } else {
+                        Text("keys.details.secureEnclave.hardwarePrimary")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }

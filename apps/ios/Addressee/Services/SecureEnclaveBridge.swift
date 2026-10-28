@@ -181,6 +181,16 @@ final class SecureEnclaveBridge: SecureEnclaveOperations, SecureEnclaveLifecycle
 
     func registerComponentFingerprints(binding: SecureEnclaveBindingFfi) async throws {
         do {
+            let certification: SecureEnclaveReferenceFfi?
+            if let reference = binding.certification {
+                certification = try await register(
+                    reference: reference,
+                    expectedUsage: .signing,
+                    fingerprint: binding.certificateFingerprint
+                )
+            } else {
+                certification = nil
+            }
             let signing = try await register(
                 reference: binding.signing,
                 expectedUsage: .signing,
@@ -192,6 +202,12 @@ final class SecureEnclaveBridge: SecureEnclaveOperations, SecureEnclaveLifecycle
                 fingerprint: binding.encryptionComponentFingerprint
             )
             lock.withLock {
+                if let certification, let reference = binding.certification {
+                    registeredReferences[reference.id] = RegisteredReference(
+                        reference: certification,
+                        fingerprint: binding.certificateFingerprint
+                    )
+                }
                 registeredReferences[binding.signing.id] = RegisteredReference(
                     reference: signing,
                     fingerprint: binding.signingComponentFingerprint

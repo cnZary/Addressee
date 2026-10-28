@@ -37,6 +37,7 @@ pub struct SecureEnclaveBindingFfi {
     pub encryption_component_fingerprint: String,
     pub signing: SecureEnclaveReferenceFfi,
     pub encryption: SecureEnclaveReferenceFfi,
+    pub certification: Option<SecureEnclaveReferenceFfi>,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -77,9 +78,10 @@ pub trait SecureEnclaveOperations: Send + Sync {
     ) -> Result<Vec<u8>, SecureEnclaveErrorFfi>;
 }
 
-struct FfiP256Operations {
-    signing: SecureEnclaveReferenceFfi,
-    encryption: SecureEnclaveReferenceFfi,
+pub(crate) struct FfiP256Operations {
+    pub(crate) signing: SecureEnclaveReferenceFfi,
+    pub(crate) encryption: SecureEnclaveReferenceFfi,
+    certification: Option<SecureEnclaveReferenceFfi>,
     provider: Arc<dyn SecureEnclaveOperations>,
 }
 
@@ -98,11 +100,22 @@ impl FfiP256Operations {
         }
         Ok(reference.clone())
     }
+
+    fn signing_reference(&self, id: &str) -> Result<SecureEnclaveReferenceFfi, RemoteKeyFailure> {
+        if self.signing.id == id {
+            return Ok(self.signing.clone());
+        }
+        self.certification
+            .as_ref()
+            .filter(|reference| reference.id == id)
+            .cloned()
+            .ok_or(RemoteKeyFailure::Unavailable)
+    }
 }
 
 impl P256Operations for FfiP256Operations {
     fn sign_sha256(&self, reference: &str, digest: &[u8]) -> Result<Vec<u8>, RemoteKeyFailure> {
-        let reference = self.reference(reference, SecureEnclaveUsageFfi::Signing)?;
+        let reference = self.signing_reference(reference)?;
         self.provider
             .sign_sha256(reference, digest.to_vec())
             .map_err(Into::into)
@@ -195,12 +208,13 @@ impl OpenPgpEngine {
     pub fn generate_secure_enclave_key(
         &self,
         user_id: String,
+        certification: SecureEnclaveReferenceFfi,
         signing: SecureEnclaveReferenceFfi,
         encryption: SecureEnclaveReferenceFfi,
         provider: Arc<dyn SecureEnclaveOperations>,
     ) -> Result<SecureEnclaveGeneratedKeyFfi, AddresseeError> {
-        let (signing_key, encryption_key, operations) =
-            new_components(signing, encryption, provider)?;
+        let (certification_key, signing_key, encryption_key, operations) =
+            new_components(certification, signing, encryption, provider)?;
         let signing_public = signing_key
             .public_subkey()
             .map_err(|_| AddresseeError::InvalidCertificate)?;
@@ -211,8 +225,18 @@ impl OpenPgpEngine {
         let encryption_fingerprint = fingerprint(&encryption_public)?;
         let mut keys = self.lock()?;
         let mut providers = self.lock_remote_write()?;
-        let generated = keys.generate_external_p256(&user_id, &signing_key, &encryption_key)?;
+        let generated = keys.generate_external_p256_hardware(
+            &user_id,
+            &certification_key,
+            &signing_key,
+            &encryption_key,
+        )?;
+        let expected_fingerprint = fingerprint(certification_key.public_key())?;
         let fingerprint = generated.metadata.fingerprint.clone();
+        if fingerprint != expected_fingerprint {
+            keys.remove(&fingerprint)?;
+            return Err(AddresseeError::InvalidCertificate);
+        }
         if providers.contains(&fingerprint) {
             keys.remove(&fingerprint)?;
             return Err(AddresseeError::CardRegistrationConflict);
@@ -224,6 +248,7 @@ impl OpenPgpEngine {
             encryption_component_fingerprint: encryption_fingerprint.to_string(),
             signing: operations.signing.clone(),
             encryption: operations.encryption.clone(),
+            certification: operations.certification.clone(),
         };
         let resolver = SecureEnclaveResolver {
             certificate: fingerprint.clone(),
@@ -311,26 +336,53 @@ impl OpenPgpEngine {
     }
 }
 
-fn new_components(
+pub(crate) fn new_components(
+    certification: SecureEnclaveReferenceFfi,
     signing: SecureEnclaveReferenceFfi,
     encryption: SecureEnclaveReferenceFfi,
     provider: Arc<dyn SecureEnclaveOperations>,
-) -> Result<(P256RemoteKey, P256RemoteKey, Arc<FfiP256Operations>), AddresseeError> {
+) -> Result<
+    (
+        P256RemoteKey,
+        P256RemoteKey,
+        P256RemoteKey,
+        Arc<FfiP256Operations>,
+    ),
+    AddresseeError,
+> {
+    validate_reference(
+        &certification,
+        SecureEnclaveUsageFfi::Signing,
+        provider.as_ref(),
+    )?;
     validate_reference(&signing, SecureEnclaveUsageFfi::Signing, provider.as_ref())?;
     validate_reference(
         &encryption,
         SecureEnclaveUsageFfi::KeyAgreement,
         provider.as_ref(),
     )?;
-    if signing.id == encryption.id {
+    if certification.id == signing.id
+        || certification.id == encryption.id
+        || signing.id == encryption.id
+    {
         return Err(AddresseeError::UnsupportedOperation);
     }
+    let certification_reference = certification.clone();
     let operations = Arc::new(FfiP256Operations {
         signing,
         encryption,
+        certification: Some(certification),
         provider,
     });
     let now = u64::from(pgp::types::Timestamp::now().as_secs());
+    let certification = P256RemoteKey::new_signing(
+        certification_reference.id,
+        &certification_reference.public_key_x963,
+        now,
+        operations.clone(),
+        Arc::new(Mutex::new(RemoteKeyFailure::Unavailable)),
+    )
+    .map_err(map_p256_error)?;
     let signing = P256RemoteKey::new_signing(
         operations.signing.id.clone(),
         &operations.signing.public_key_x963,
@@ -347,7 +399,7 @@ fn new_components(
         Arc::new(Mutex::new(RemoteKeyFailure::Unavailable)),
     )
     .map_err(map_p256_error)?;
-    Ok((signing, encryption, operations))
+    Ok((certification, signing, encryption, operations))
 }
 
 fn validate_reference(
@@ -393,6 +445,22 @@ pub(crate) fn validated_resolver(
     {
         return Err(AddresseeError::ConflictingCertificate);
     }
+    if let Some(reference) = &binding.certification {
+        validate_reference(reference, SecureEnclaveUsageFfi::Signing, provider.as_ref())?;
+        let primary = P256RemoteKey::new_signing(
+            reference.id.clone(),
+            &reference.public_key_x963,
+            u64::from(certificate.primary_key.created_at().as_secs()),
+            operations_for(binding, provider.clone()),
+            Arc::new(Mutex::new(RemoteKeyFailure::Unavailable)),
+        )
+        .map_err(map_p256_error)?;
+        if primary.public_key().fingerprint() != certificate.primary_key.fingerprint()
+            || !primary.has_public_key(&reference.public_key_x963)
+        {
+            return Err(AddresseeError::ConflictingCertificate);
+        }
+    }
     let signing = P256RemoteKey::from_signing_component(
         binding.signing.id.clone(),
         &signing_component.key,
@@ -422,7 +490,11 @@ pub(crate) fn validated_resolver(
         SecureEnclaveUsageFfi::KeyAgreement,
         provider.as_ref(),
     )?;
-    if binding.signing.id == binding.encryption.id {
+    if binding.signing.id == binding.encryption.id
+        || binding.certification.as_ref().is_some_and(|reference| {
+            reference.id == binding.signing.id || reference.id == binding.encryption.id
+        })
+    {
         return Err(AddresseeError::UnsupportedOperation);
     }
     if !signing.has_public_key(&binding.signing.public_key_x963)
@@ -449,6 +521,7 @@ fn operations_for(
     Arc::new(FfiP256Operations {
         signing: binding.signing.clone(),
         encryption: binding.encryption.clone(),
+        certification: binding.certification.clone(),
         provider,
     })
 }

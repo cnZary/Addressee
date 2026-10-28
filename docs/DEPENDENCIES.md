@@ -41,6 +41,8 @@ The crates.io index still reports `pgp 0.21.0` as the newest release on 2026-10-
 
 A later online RustSec retrieval failed with a network I/O error on 2026-10-27; that incomplete online attempt is not reported as a successful audit. A separate run explicitly selected the previously cloned official `https://github.com/RustSec/advisory-db.git` snapshot at revision `a78282a1414d6c28cc228c4eae3570451affb0dc` through `ADDRESSEE_RUSTSEC_DB` and `--no-fetch`. It loaded 1,378 advisories, scanned all 221 locked packages, and confirmed `RUSTSEC-2026-0387` plus the two license-text collection failures. The audit correctly returned failure. No new ignore was added. This snapshot result does not claim coverage of advisories published after the snapshot.
 
+A subsequent standard audit on 2026-10-28 successfully fetched the official RustSec database, loaded 1,381 advisories, and scanned all 221 locked packages. It confirmed the same unsuppressed `RUSTSEC-2026-0387` vulnerability and two license-text collection requirements, with zero license-policy failures. The result is `build/full-hardware-dependency-audit-20261028.log`; no new dependency or audit exception was introduced.
+
 Two advisory IDs have narrow, version-bound review records in `scripts/audit-exceptions.json` and are printed on every audit run:
 
 - `RUSTSEC-2023-0071` affects `rsa 0.9.10` and has no patched stable release. The documented acceptance boundary is the official RustSec workaround for local use without attacker-observable timing. Adding a network or unattended decryption interface invalidates this boundary.

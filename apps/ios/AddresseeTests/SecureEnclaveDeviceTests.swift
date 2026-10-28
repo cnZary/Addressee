@@ -187,28 +187,45 @@ final class SecureEnclaveDeviceTests: XCTestCase {
                 return
             }
             let snapshot = try? await store.snapshot()
-            var references = (snapshot?.bindings ?? []).flatMap { [$0.signing, $0.encryption] }
+            var references = (snapshot?.bindings ?? []).flatMap {
+                [$0.certification, $0.signing, $0.encryption].compactMap { $0 }
+            }
             if let pending = snapshot?.pending {
                 switch pending {
                 case .generation(let journal):
                     if let candidate = journal.candidate {
-                        references.append(candidate.signing.ffi())
-                        references.append(candidate.encryption.ffi())
+                        references += [
+                            candidate.certification,
+                            candidate.signing,
+                            candidate.encryption,
+                        ].compactMap { $0 }.map { $0.ffi() }
                     } else {
-                        references.append(SecureEnclaveReferenceFfi(
-                            id: journal.signingIdentifier,
-                            usage: .signing,
-                            publicKeyX963: Data()
-                        ))
-                        references.append(SecureEnclaveReferenceFfi(
-                            id: journal.encryptionIdentifier,
-                            usage: .keyAgreement,
-                            publicKeyX963: Data()
-                        ))
+                        references += [
+                            journal.certificationIdentifier.map {
+                                SecureEnclaveReferenceFfi(
+                                    id: $0,
+                                    usage: .signing,
+                                    publicKeyX963: Data()
+                                )
+                            },
+                            SecureEnclaveReferenceFfi(
+                                id: journal.signingIdentifier,
+                                usage: .signing,
+                                publicKeyX963: Data()
+                            ),
+                            SecureEnclaveReferenceFfi(
+                                id: journal.encryptionIdentifier,
+                                usage: .keyAgreement,
+                                publicKeyX963: Data()
+                            ),
+                        ].compactMap { $0 }
                     }
                 case .deletion(let journal):
-                    references.append(journal.binding.signing.ffi())
-                    references.append(journal.binding.encryption.ffi())
+                    references += [
+                        journal.binding.certification,
+                        journal.binding.signing,
+                        journal.binding.encryption,
+                    ].compactMap { $0 }.map { $0.ffi() }
                 }
             }
             for reference in references {
@@ -412,13 +429,13 @@ final class SecureEnclaveDeviceTests: XCTestCase {
         }
         XCTAssertEqual(
             records.first { $0.fingerprint == fingerprint }?.protectedSecret != nil,
-            peerFixture == nil,
+            binding.certification == nil,
             String(reflecting: snapshotDiagnostics)
         )
         let secondEngine = OpenPgpEngine()
         try await offMain { try secondEngine.restoreStorage(records: records) }
         let restoredMetadata = try await offMain { try secondEngine.listKeys() }
-        let expectedStorage: KeyStorageFfi = peerFixture == nil ? .softwareSecret : .publicOnly
+        let expectedStorage: KeyStorageFfi = binding.certification == nil ? .softwareSecret : .publicOnly
         XCTAssertEqual(
             restoredMetadata.first { $0.fingerprint == fingerprint }?.storage,
             expectedStorage,

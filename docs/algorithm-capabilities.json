@@ -3261,7 +3261,7 @@
       "canVerify": false,
       "canEncrypt": false,
       "canDecrypt": false,
-      "canUseAsPrimaryKey": false,
+      "canUseAsPrimaryKey": true,
       "canUseAsSigningSubkey": true,
       "canUseAsEncryptionSubkey": false,
       "isHardwareBacked": true,
@@ -3337,11 +3337,11 @@
         },
         {
           "operation": "useAsPrimaryKey",
-          "libraryClaim": "notClaimed",
-          "implementation": "notApplicable",
-          "unitTests": "notApplicable",
-          "independentInteroperabilityTests": "notApplicable",
-          "physicalHardwareTests": "notApplicable"
+          "libraryClaim": "claimed",
+          "implementation": "implemented",
+          "unitTests": "passed",
+          "independentInteroperabilityTests": "passed",
+          "physicalHardwareTests": "notRun"
         },
         {
           "operation": "useAsSigningSubkey",

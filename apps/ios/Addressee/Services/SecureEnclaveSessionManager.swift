@@ -96,14 +96,20 @@ final class SecureEnclaveSessionManager: SecureEnclaveSessionManaging {
         defer { isTransitioning = false }
         isAvailable = await lifecycle.isAvailable()
         guard isAvailable else { throw AddresseeError.RemoteKeyUnavailable }
+        let certificationIdentifier = try await lifecycle.nextIdentifier(for: .signing)
         let signingIdentifier = try await lifecycle.nextIdentifier(for: .signing)
         let encryptionIdentifier = try await lifecycle.nextIdentifier(for: .keyAgreement)
         try await store.beginGeneration(
+            certificationIdentifier: certificationIdentifier,
             signingIdentifier: signingIdentifier,
             encryptionIdentifier: encryptionIdentifier
         )
         var generated: SecureEnclaveGeneratedKeyFfi?
         do {
+            let certification = try await lifecycle.generateReference(
+                usage: .signing,
+                identifier: certificationIdentifier
+            )
             let signing = try await lifecycle.generateReference(
                 usage: .signing,
                 identifier: signingIdentifier
@@ -115,6 +121,7 @@ final class SecureEnclaveSessionManager: SecureEnclaveSessionManaging {
             generated = try await engineCall { [lifecycle] engine in
                 try engine.generateSecureEnclaveKey(
                     userId: userID,
+                    certification: certification,
                     signing: signing,
                     encryption: encryption,
                     provider: lifecycle
@@ -206,6 +213,12 @@ final class SecureEnclaveSessionManager: SecureEnclaveSessionManaging {
         }
         for (identifier, usage, reference, fingerprint) in [
             (
+                journal.certificationIdentifier,
+                SecureEnclaveUsageFfi.signing,
+                candidate?.certification,
+                candidate?.certificateFingerprint
+            ),
+            (
                 journal.signingIdentifier,
                 SecureEnclaveUsageFfi.signing,
                 candidate?.signing,
@@ -221,7 +234,7 @@ final class SecureEnclaveSessionManager: SecureEnclaveSessionManaging {
             do {
                 if let reference {
                     try await lifecycle.deleteReference(reference.ffi(), componentFingerprint: fingerprint)
-                } else {
+                } else if let identifier {
                     try await lifecycle.deleteUnboundIdentifier(identifier, usage: usage)
                 }
             } catch {
@@ -236,11 +249,20 @@ final class SecureEnclaveSessionManager: SecureEnclaveSessionManaging {
         let binding = journal.binding.ffi()
         try await removeEngineRecord(binding)
         registrations.removeAll { $0.certificateFingerprint == binding.certificateFingerprint }
-        for reference in [journal.binding.signing, journal.binding.encryption] {
+        let references = [
+            journal.binding.certification,
+            journal.binding.signing,
+            journal.binding.encryption,
+        ].compactMap { $0 }
+        for reference in references {
             if journal.deletedIdentifiers.contains(reference.id) { continue }
-            let fingerprint = reference.usage == .signing
-                ? journal.binding.signingComponentFingerprint
-                : journal.binding.encryptionComponentFingerprint
+            let fingerprint = if reference.id == journal.binding.certification?.id {
+                journal.binding.certificateFingerprint
+            } else if reference.usage == .signing {
+                journal.binding.signingComponentFingerprint
+            } else {
+                journal.binding.encryptionComponentFingerprint
+            }
             try await lifecycle.deleteReference(reference.ffi(), componentFingerprint: fingerprint)
             try await store.markDeleted(identifier: reference.id)
         }
@@ -264,7 +286,10 @@ final class SecureEnclaveSessionManager: SecureEnclaveSessionManaging {
             try engine.listKeys().first(where: { $0.fingerprint == fingerprint })
         }
         if let matching {
+            let hasExpectedPrimaryStorage = binding.certification == nil
+                || matching.primary.storage == .publicOnly
             guard matching.privateExportPolicy != .allowed,
+                  hasExpectedPrimaryStorage,
                   matching.subkeys.allSatisfy({ $0.storage == .publicOnly }) else {
                 throw SecureEnclaveLifecycleError.conflictingRecord
             }

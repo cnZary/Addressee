@@ -309,6 +309,30 @@ impl SoftwareKeyStore {
         Ok(())
     }
 
+    pub(crate) fn insert_external_public_certificate(
+        &mut self,
+        public: SignedPublicKey,
+    ) -> Result<GeneratedKey, KeyError> {
+        if public.public_subkeys.len() != 2 {
+            return Err(KeyError::InvalidParameters(
+                "external certificates require two public subkeys".to_owned(),
+            ));
+        }
+        public.verify_bindings()?;
+        let fingerprint = FullFingerprint::from_rpgp(&public.fingerprint());
+        if self.records.contains_key(&fingerprint) {
+            return Err(KeyError::ConflictingCertificate { fingerprint });
+        }
+        let record = KeyRecord::from_public(public);
+        let metadata = record.metadata()?;
+        let public_certificate = record.public.to_bytes()?;
+        self.records.insert(fingerprint, record);
+        Ok(GeneratedKey {
+            metadata,
+            public_certificate,
+        })
+    }
+
     pub(crate) fn insert_external_certificate(
         &mut self,
         secret: SignedSecretKey,

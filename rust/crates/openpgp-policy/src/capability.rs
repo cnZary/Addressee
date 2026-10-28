@@ -228,6 +228,13 @@ impl CapabilityEntry {
                         && tested_card_operations(algorithm, key_version, operation);
                     let secure_enclave_validated = backend == Backend::SecureEnclave
                         && tested_secure_enclave_operations(algorithm, key_version, operation);
+                    let secure_enclave_implemented = backend == Backend::SecureEnclave
+                        && (secure_enclave_validated
+                            || locally_tested_secure_enclave_operations(
+                                algorithm,
+                                key_version,
+                                operation,
+                            ));
                     let mut evidence = OperationEvidence::baseline(
                         backend,
                         claims.get(operation),
@@ -235,7 +242,7 @@ impl CapabilityEntry {
                         lifecycle_validated
                             || message_validated
                             || card_validated
-                            || secure_enclave_validated,
+                            || secure_enclave_implemented,
                     );
                     if backend == Backend::Software
                         && evidence.independent_interoperability_tests == TestStatus::NotRun
@@ -249,9 +256,11 @@ impl CapabilityEntry {
                     }
                     if secure_enclave_validated {
                         evidence.physical_hardware_tests = TestStatus::Passed;
-                        if secure_enclave_interop_passed(algorithm, key_version, operation) {
-                            evidence.independent_interoperability_tests = TestStatus::Passed;
-                        }
+                    }
+                    if secure_enclave_implemented
+                        && secure_enclave_interop_passed(algorithm, key_version, operation)
+                    {
+                        evidence.independent_interoperability_tests = TestStatus::Passed;
                     }
                     evidence
                 })
@@ -453,9 +462,23 @@ fn tested_secure_enclave_operations(
     }
 }
 
+/// Full-hardware certificate construction and GnuPG callback tests cover the
+/// certification primary. No physical device has validated this new component.
+fn locally_tested_secure_enclave_operations(
+    algorithm: Algorithm,
+    key_version: KeyVersion,
+    operation: Operation,
+) -> bool {
+    algorithm == Algorithm::NistP256Ecdsa
+        && key_version == KeyVersion::V4
+        && operation == Operation::UseAsPrimaryKey
+}
+
 /// Independent GnuPG 2.5.24 evidence covers all three signature forms, tamper
 /// rejection, device decryption of GnuPG-encrypted messages, and verification of
 /// an embedded GnuPG signature after decryption. Identity trust is not established.
+/// The certification primary has host GnuPG certificate/message evidence only;
+/// this software-provider evidence never marks a physical-hardware test passed.
 fn secure_enclave_interop_passed(
     algorithm: Algorithm,
     key_version: KeyVersion,
@@ -470,6 +493,7 @@ fn secure_enclave_interop_passed(
             Operation::Generate
                 | Operation::ExportPublic
                 | Operation::Sign
+                | Operation::UseAsPrimaryKey
                 | Operation::UseAsSigningSubkey
         ),
         Algorithm::NistP256Ecdh => matches!(
@@ -607,6 +631,7 @@ fn secure_enclave_claims(algorithm: Algorithm, key_version: KeyVersion) -> Optio
             can_generate: true,
             can_export_public: true,
             can_sign: true,
+            can_use_as_primary_key: true,
             can_use_as_signing_subkey: true,
             ..CapabilityFlags::default()
         }),

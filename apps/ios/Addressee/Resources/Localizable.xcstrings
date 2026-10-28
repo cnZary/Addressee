@@ -2085,18 +2085,18 @@
         }
       }
     },
-    "generation.secureEnclave.hybrid" : {
+    "generation.secureEnclave.fullHardware" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No OpenPGP password is required. New device-bound subkeys require Face ID or Touch ID for private-key operations; their private keys never enter Rust or software storage."
+            "value" : "No OpenPGP password is required. The certification primary, signing subkey, and encryption subkey are three separate device-bound keys. Face ID or Touch ID is required for private-key operations; private keys never enter Rust or software storage."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无需设置 OpenPGP 密码。新的设备绑定子钥在进行私钥操作时需要面容 ID 或触控 ID；其私钥不会进入 Rust 或软件存储。"
+            "value" : "无需设置 OpenPGP 密码。认证主钥、签名子钥和加密子钥是三把独立的设备绑定密钥。私钥操作需要面容 ID 或触控 ID；私钥不会进入 Rust 或软件存储。"
           }
         }
       }
@@ -2106,13 +2106,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hardware subkeys are non-exportable. Private export of the hybrid certificate is disabled."
+            "value" : "All three hardware private keys are non-exportable. Only the public certificate can be exported."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "硬件子钥不可导出，混合证书的私钥导出已禁用。"
+            "value" : "三把硬件私钥均不可导出，只能导出公开证书。"
           }
         }
       }
@@ -2122,13 +2122,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "P-256 signing and encryption subkeys"
+            "value" : "P-256 certification primary, ECDSA signing subkey, and ECDH encryption subkey"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "P-256 签名与加密子钥"
+            "value" : "P-256 认证主钥、ECDSA 签名子钥和 ECDH 加密子钥"
           }
         }
       }
@@ -2138,13 +2138,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The certification primary key remains protected software material, not Secure Enclave-backed. Its one-time internal protection password is discarded after generation, so it cannot later certify, revoke, or recover this certificate."
+            "value" : "The certification primary stays in the Secure Enclave. If it is lost, the current app cannot add or revoke subkeys or revoke this certificate. Normal signing and decryption do not use the primary."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "认证主钥仍是受保护的软件材料，不在 Secure Enclave 中。一次性内部保护密码在生成后销毁，因此该主钥之后不能再用于认证、吊销或恢复此证书。"
+            "value" : "认证主钥保存在 Secure Enclave 中。如果主钥丢失，当前应用将无法添加或吊销子钥，也无法吊销此证书。正常签名和解密不使用主钥。"
           }
         }
       }
@@ -2154,13 +2154,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "If this device or its encryption subkey is lost, messages encrypted only to that subkey cannot be recovered by the software primary key."
+            "value" : "If this device or its encryption subkey is lost, messages encrypted only to that subkey cannot be recovered. The certification primary cannot decrypt them."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "如果此设备或其加密子钥丢失，仅加密到该子钥的消息将无法通过软件主钥恢复。"
+            "value" : "如果此设备或其加密子钥丢失，仅加密到该子钥的消息将无法恢复，认证主钥也不能解密这些消息。"
           }
         }
       }
@@ -3826,13 +3826,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This permanently deletes the device-bound signing and encryption private keys as well as the protected software primary key. Messages encrypted only to the deleted hardware subkey cannot be recovered."
+            "value" : "This permanently deletes all Secure Enclave private keys associated with this certificate. Any legacy software primary is also deleted. Messages encrypted only to the deleted hardware encryption key cannot be recovered."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这将永久删除设备绑定的签名和加密私钥，以及受保护的软件主钥。仅加密到已删除硬件子钥的消息将无法恢复。"
+            "value" : "这将永久删除与此证书关联的所有 Secure Enclave 私钥，旧证书受保护的软件主钥也会被删除。仅加密到已删除硬件加密子钥的消息将无法恢复。"
           }
         }
       }
@@ -3945,6 +3945,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此旧密钥仅要求设备已解锁，原访问控制未升级为生物识别授权。"
+          }
+        }
+      }
+    },
+    "keys.details.secureEnclave.hardwarePrimary" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The certification primary and both subkeys are separate, non-exportable Secure Enclave keys. If the primary is lost, the current app cannot maintain or revoke this certificate."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "认证主钥和两个子钥都是独立且不可导出的 Secure Enclave 密钥。如果主钥丢失，当前应用将无法维护或吊销此证书。"
           }
         }
       }
@@ -5357,6 +5373,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Secure Enclave"
+          }
+        }
+      }
+    },
+    "generation.secureEnclave.fullHardwareValidationPending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Full-hardware certificate generation has not yet passed physical-device validation."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全硬件证书生成尚未通过实体设备验证。"
           }
         }
       }

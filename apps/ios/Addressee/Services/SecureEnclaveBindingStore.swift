@@ -32,6 +32,7 @@ struct SecureEnclaveBindingRecord: Codable, Equatable, Sendable {
     let encryptionComponentFingerprint: String
     let signing: SecureEnclaveReferenceRecord
     let encryption: SecureEnclaveReferenceRecord
+    let certification: SecureEnclaveReferenceRecord?
     let accessControl: SecureEnclaveAccessControl
 
     init(
@@ -44,6 +45,7 @@ struct SecureEnclaveBindingRecord: Codable, Equatable, Sendable {
         encryptionComponentFingerprint = binding.encryptionComponentFingerprint
         signing = SecureEnclaveReferenceRecord(binding.signing)
         encryption = SecureEnclaveReferenceRecord(binding.encryption)
+        certification = binding.certification.map(SecureEnclaveReferenceRecord.init)
         self.accessControl = accessControl
     }
 
@@ -55,6 +57,10 @@ struct SecureEnclaveBindingRecord: Codable, Equatable, Sendable {
         encryptionComponentFingerprint = try container.decode(String.self, forKey: .encryptionComponentFingerprint)
         signing = try container.decode(SecureEnclaveReferenceRecord.self, forKey: .signing)
         encryption = try container.decode(SecureEnclaveReferenceRecord.self, forKey: .encryption)
+        certification = try container.decodeIfPresent(
+            SecureEnclaveReferenceRecord.self,
+            forKey: .certification
+        )
         accessControl = try container.decodeIfPresent(
             SecureEnclaveAccessControl.self,
             forKey: .accessControl
@@ -68,12 +74,14 @@ struct SecureEnclaveBindingRecord: Codable, Equatable, Sendable {
             signingComponentFingerprint: signingComponentFingerprint,
             encryptionComponentFingerprint: encryptionComponentFingerprint,
             signing: signing.ffi(),
-            encryption: encryption.ffi()
+            encryption: encryption.ffi(),
+            certification: certification?.ffi()
         )
     }
 }
 
 struct SecureEnclaveGenerationJournal: Codable, Equatable, Sendable {
+    let certificationIdentifier: String?
     let signingIdentifier: String
     let encryptionIdentifier: String
     var candidate: SecureEnclaveBindingRecord?
@@ -141,15 +149,20 @@ actor SecureEnclaveBindingStore {
         )
     }
 
-    func beginGeneration(signingIdentifier: String, encryptionIdentifier: String) throws {
+    func beginGeneration(
+        certificationIdentifier: String?,
+        signingIdentifier: String,
+        encryptionIdentifier: String
+    ) throws {
         var manifest = try current()
         guard manifest.pending == nil else { throw SecureEnclaveBindingStoreError.conflict }
-        try validateIdentifier(signingIdentifier)
-        try validateIdentifier(encryptionIdentifier)
-        guard signingIdentifier != encryptionIdentifier else {
+        let identifiers = [certificationIdentifier, signingIdentifier, encryptionIdentifier].compactMap { $0 }
+        for identifier in identifiers { try validateIdentifier(identifier) }
+        guard Set(identifiers).count == identifiers.count else {
             throw SecureEnclaveBindingStoreError.invalidManifest
         }
         manifest.pending = .generation(SecureEnclaveGenerationJournal(
+            certificationIdentifier: certificationIdentifier,
             signingIdentifier: signingIdentifier,
             encryptionIdentifier: encryptionIdentifier,
             candidate: nil
@@ -164,7 +177,8 @@ actor SecureEnclaveBindingStore {
         }
         let candidate = SecureEnclaveBindingRecord(binding)
         try validate(candidate)
-        guard journal.signingIdentifier == candidate.signing.id,
+        guard journal.certificationIdentifier == candidate.certification?.id,
+              journal.signingIdentifier == candidate.signing.id,
               journal.encryptionIdentifier == candidate.encryption.id,
               journal.candidate == nil || journal.candidate == candidate else {
             throw SecureEnclaveBindingStoreError.conflict
@@ -215,8 +229,15 @@ actor SecureEnclaveBindingStore {
 
     func markDeleted(identifier: String) throws {
         var manifest = try current()
-        guard case .deletion(var journal) = manifest.pending,
-              journal.binding.signing.id == identifier || journal.binding.encryption.id == identifier else {
+        guard case .deletion(var journal) = manifest.pending else {
+            throw SecureEnclaveBindingStoreError.conflict
+        }
+        let identifiers = [
+            journal.binding.certification?.id,
+            journal.binding.signing.id,
+            journal.binding.encryption.id,
+        ].compactMap { $0 }
+        guard identifiers.contains(identifier) else {
             throw SecureEnclaveBindingStoreError.conflict
         }
         journal.deletedIdentifiers.insert(identifier)
@@ -229,9 +250,10 @@ actor SecureEnclaveBindingStore {
         guard case .deletion(let journal) = manifest.pending,
               journal.binding.certificateFingerprint == certificateFingerprint,
               journal.deletedIdentifiers.isSuperset(of: [
+                  journal.binding.certification?.id,
                   journal.binding.signing.id,
                   journal.binding.encryption.id,
-              ]) else {
+              ].compactMap { $0 }) else {
             throw SecureEnclaveBindingStoreError.conflict
         }
         manifest.bindings.removeAll { $0.certificateFingerprint == certificateFingerprint }
@@ -313,14 +335,19 @@ actor SecureEnclaveBindingStore {
         case .none:
             break
         case .generation(let journal):
-            try validateIdentifier(journal.signingIdentifier)
-            try validateIdentifier(journal.encryptionIdentifier)
-            guard journal.signingIdentifier != journal.encryptionIdentifier else {
+            let identifiers = [
+                journal.certificationIdentifier,
+                journal.signingIdentifier,
+                journal.encryptionIdentifier,
+            ].compactMap { $0 }
+            for identifier in identifiers { try validateIdentifier(identifier) }
+            guard Set(identifiers).count == identifiers.count else {
                 throw SecureEnclaveBindingStoreError.invalidManifest
             }
             if let candidate = journal.candidate {
                 try validate(candidate)
-                guard candidate.signing.id == journal.signingIdentifier,
+                guard candidate.certification?.id == journal.certificationIdentifier,
+                      candidate.signing.id == journal.signingIdentifier,
                       candidate.encryption.id == journal.encryptionIdentifier else {
                     throw SecureEnclaveBindingStoreError.invalidManifest
                 }
@@ -328,9 +355,10 @@ actor SecureEnclaveBindingStore {
         case .deletion(let journal):
             try validate(journal.binding)
             guard journal.deletedIdentifiers.isSubset(of: [
+                journal.binding.certification?.id,
                 journal.binding.signing.id,
                 journal.binding.encryption.id,
-            ]) else {
+            ].compactMap { $0 }) else {
                 throw SecureEnclaveBindingStoreError.invalidManifest
             }
         }
@@ -347,16 +375,21 @@ actor SecureEnclaveBindingStore {
                 throw SecureEnclaveBindingStoreError.invalidManifest
             }
         }
-        try validateIdentifier(binding.signing.id)
-        try validateIdentifier(binding.encryption.id)
-        guard binding.signing.id != binding.encryption.id,
+        let references = [
+            binding.certification,
+            binding.signing,
+            binding.encryption,
+        ].compactMap { $0 }
+        guard Set(references.map(\.id)).count == references.count,
               binding.signing.usage == .signing,
               binding.encryption.usage == .keyAgreement,
+              binding.certification?.usage != .keyAgreement,
               !binding.publicCertificate.isEmpty,
               binding.publicCertificate.count <= 4 * 1024 * 1024 else {
             throw SecureEnclaveBindingStoreError.invalidManifest
         }
-        for reference in [binding.signing, binding.encryption] {
+        for reference in references {
+            try validateIdentifier(reference.id)
             guard reference.publicKeyX963.count == 65,
                   reference.publicKeyX963.first == 0x04,
                   (try? P256.Signing.PublicKey(x963Representation: reference.publicKeyX963)) != nil else {

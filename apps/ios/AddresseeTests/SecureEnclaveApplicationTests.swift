@@ -54,7 +54,7 @@ final class SecureEnclaveApplicationTests: XCTestCase {
         XCTAssertEqual(actual, expected.withUnsafeBytes { Data($0) })
     }
 
-    func testHybridCertificateSupportsMessagesWithoutSoftwarePassword() async throws {
+    func testFullHardwareCertificateSupportsMessagesWithoutSoftwarePassword() async throws {
         let provider = SoftwareP256Provider()
         let snapshots = TestSnapshots()
         let engine = OpenPgpEngine()
@@ -75,8 +75,17 @@ final class SecureEnclaveApplicationTests: XCTestCase {
         XCTAssertEqual(requestedAccessControls[.keyAgreement], .biometryAny)
         XCTAssertEqual(manager.accessControls[fingerprint], .biometryAny)
         XCTAssertEqual(model.secureEnclaveRegistrations.count, 1)
-        XCTAssertEqual(generated.generated.summary.primary.storage, .softwareSecret)
+        let certification = try XCTUnwrap(generated.binding.certification)
+        XCTAssertEqual(certification.usage, .signing)
+        XCTAssertEqual(
+            Set([certification.id, generated.binding.signing.id, generated.binding.encryption.id]).count,
+            3
+        )
+        XCTAssertEqual(generated.generated.summary.primary.storage, .publicOnly)
+        XCTAssertTrue(model.hasSecureEnclaveComponent(certificate: fingerprint, component: fingerprint))
         XCTAssertTrue(generated.generated.summary.subkeys.allSatisfy { $0.storage == .publicOnly })
+        let storedKeyCount = await provider.storedKeyCount
+        XCTAssertEqual(storedKeyCount, 3)
         XCTAssertEqual(model.privateKeyAccess(fingerprint: fingerprint, operation: .signing), .secureEnclave)
         XCTAssertEqual(model.privateKeyAccess(fingerprint: fingerprint, operation: .decryption), .secureEnclave)
         XCTAssertTrue(model.canSubmitPrivateKeyOperation(fingerprint: fingerprint, password: ""))
@@ -162,9 +171,9 @@ final class SecureEnclaveApplicationTests: XCTestCase {
 
         do {
             _ = try await model.exportPrivate(fingerprint: fingerprint, format: .binary)
-            XCTFail("The hybrid certificate must not expose private export")
+            XCTFail("A public-only hardware certificate must not expose private export")
         } catch let error as AddresseeError {
-            XCTAssertEqual(error, .ExportDisabled)
+            XCTAssertEqual(error, .PublicKeyOnly)
         }
         XCTAssertTrue(model.canGenerateSecureEnclave)
     }
@@ -296,7 +305,7 @@ final class SecureEnclaveApplicationTests: XCTestCase {
         XCTAssertNil(restored.pending)
     }
 
-    func testBindingFailureRollsBackCertificateAndBothAllocatedKeys() async throws {
+    func testBindingFailureRollsBackCertificateAndAllThreeAllocatedKeys() async throws {
         let provider = SoftwareP256Provider()
         await provider.failNextRegistration()
         let snapshots = TestSnapshots()

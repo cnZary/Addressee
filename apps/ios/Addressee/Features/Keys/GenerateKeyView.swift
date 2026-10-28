@@ -62,9 +62,11 @@ struct GenerateKeyView: View {
             } else {
                 Section("generation.secureEnclave") {
                     Label("generation.secureEnclave.p256", systemImage: "lock.shield")
-                    Text("generation.secureEnclave.hybrid")
+                    Text("generation.secureEnclave.fullHardware")
                     Text("generation.secureEnclave.primaryLifecycle")
                     Text("generation.secureEnclave.recoveryWarning")
+                    Text("generation.secureEnclave.fullHardwareValidationPending")
+                        .foregroundStyle(.orange)
                     if !model.canGenerateSecureEnclave {
                         Text("security.enclave.validationPending")
                             .foregroundStyle(.orange)

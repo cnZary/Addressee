@@ -453,7 +453,7 @@ fn secure_enclave_evidence_is_limited_to_executed_p256_operations() {
         .filter(|entry| entry.backend == Backend::SecureEnclave)
     {
         for operation in Operation::ALL {
-            let locally_validated = matches!(
+            let physically_validated = matches!(
                 (entry.algorithm, operation),
                 (
                     Algorithm::NistP256Ecdsa,
@@ -469,6 +469,9 @@ fn secure_enclave_evidence_is_limited_to_executed_p256_operations() {
                         | Operation::UseAsEncryptionSubkey
                 )
             );
+            let locally_validated = physically_validated
+                || (entry.algorithm == Algorithm::NistP256Ecdsa
+                    && operation == Operation::UseAsPrimaryKey);
             let independent = matches!(
                 (entry.algorithm, operation),
                 (
@@ -476,6 +479,7 @@ fn secure_enclave_evidence_is_limited_to_executed_p256_operations() {
                     Operation::Generate
                         | Operation::ExportPublic
                         | Operation::Sign
+                        | Operation::UseAsPrimaryKey
                         | Operation::UseAsSigningSubkey
                 ) | (
                     Algorithm::NistP256Ecdh,
@@ -495,16 +499,16 @@ fn secure_enclave_evidence_is_limited_to_executed_p256_operations() {
             assert_eq!(evidence.unit_tests == TestStatus::Passed, locally_validated);
             assert_eq!(
                 evidence.physical_hardware_tests == TestStatus::Passed,
-                locally_validated
+                physically_validated
             );
             assert_eq!(
                 evidence.independent_interoperability_tests == TestStatus::Passed,
                 independent
             );
-            assert_eq!(entry.is_operation_enabled(operation), locally_validated);
+            assert_eq!(entry.is_operation_enabled(operation), physically_validated);
             assert_eq!(
                 entry.is_fully_supported(operation),
-                locally_validated && independent
+                physically_validated && independent
             );
         }
     }
@@ -535,6 +539,8 @@ fn hardware_backends_are_non_exportable_and_secure_enclave_is_narrow() {
         )
         .unwrap();
     assert!(signing.can_generate && signing.can_export_public && signing.can_sign);
+    assert!(signing.can_use_as_primary_key && signing.can_use_as_signing_subkey);
+    assert!(!signing.can_use_as_encryption_subkey);
     assert!(!signing.can_verify && !signing.can_encrypt && !signing.can_decrypt);
 
     let agreement = registry

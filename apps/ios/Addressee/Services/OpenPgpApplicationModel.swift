@@ -253,7 +253,8 @@ final class OpenPgpApplicationModel: ObservableObject {
         secureEnclaveBindings.contains {
             $0.certificateFingerprint == certificate
                 && ($0.signingComponentFingerprint == component
-                    || $0.encryptionComponentFingerprint == component)
+                    || $0.encryptionComponentFingerprint == component
+                    || ($0.certification != nil && $0.certificateFingerprint == component))
         }
     }
 
@@ -334,6 +335,9 @@ final class OpenPgpApplicationModel: ObservableObject {
     }
 
     func exportPrivate(fingerprint: String, format: ExportFormatFfi) async throws -> Data {
+        guard keys.first(where: { $0.fingerprint == fingerprint })?.privateExportPolicy != .notApplicable else {
+            throw AddresseeError.PublicKeyOnly
+        }
         guard keys.first(where: { $0.fingerprint == fingerprint })?.privateExportPolicy == .allowed else {
             throw AddresseeError.ExportDisabled
         }

@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use p256::ecdsa::signature::hazmat::PrehashSigner as _;
 use p256::elliptic_curve::sec1::ToEncodedPoint as _;
+use pgp::types::KeyDetails as _;
 
 use crate::{
     AddresseeError, DecryptionStatusFfi, EncryptionConfigFfi, ExportFormatFfi, ExportPolicyFfi,
@@ -23,6 +24,7 @@ enum Fault {
 }
 
 struct TestP256Provider {
+    certification: p256::ecdsa::SigningKey,
     signing: p256::ecdsa::SigningKey,
     encryption: p256::SecretKey,
     fault: Mutex<Fault>,
@@ -33,10 +35,24 @@ impl TestP256Provider {
     fn new() -> Self {
         let mut rng = rand::thread_rng();
         Self {
+            certification: p256::ecdsa::SigningKey::random(&mut rng),
             signing: p256::ecdsa::SigningKey::random(&mut rng),
             encryption: p256::SecretKey::random(&mut rng),
             fault: Mutex::new(Fault::None),
             digests: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn certification_reference(&self) -> SecureEnclaveReferenceFfi {
+        SecureEnclaveReferenceFfi {
+            id: "test-certification-primary".to_owned(),
+            usage: SecureEnclaveUsageFfi::Signing,
+            public_key_x963: self
+                .certification
+                .verifying_key()
+                .to_encoded_point(false)
+                .as_bytes()
+                .to_vec(),
         }
     }
 
@@ -65,6 +81,19 @@ impl TestP256Provider {
         )
     }
 
+    fn signing_key(
+        &self,
+        reference: &SecureEnclaveReferenceFfi,
+    ) -> Result<&p256::ecdsa::SigningKey, SecureEnclaveErrorFfi> {
+        if reference.id == self.certification_reference().id {
+            Ok(&self.certification)
+        } else if reference.id == self.references().0.id {
+            Ok(&self.signing)
+        } else {
+            Err(SecureEnclaveErrorFfi::InvalidReference)
+        }
+    }
+
     fn fault(&self, fault: Fault) {
         *self.fault.lock().unwrap() = fault;
     }
@@ -80,7 +109,8 @@ impl TestP256Provider {
 
     fn validate(&self, reference: &SecureEnclaveReferenceFfi) -> Result<(), SecureEnclaveErrorFfi> {
         let (signing, encryption) = self.references();
-        if (reference.usage == SecureEnclaveUsageFfi::Signing && reference.id == signing.id)
+        if (reference.usage == SecureEnclaveUsageFfi::Signing
+            && [signing.id, self.certification_reference().id].contains(&reference.id))
             || (reference.usage == SecureEnclaveUsageFfi::KeyAgreement
                 && reference.id == encryption.id)
         {
@@ -97,10 +127,14 @@ impl SecureEnclaveOperations for TestP256Provider {
         reference: SecureEnclaveReferenceFfi,
     ) -> Result<Vec<u8>, SecureEnclaveErrorFfi> {
         self.validate(&reference)?;
-        let (signing, encryption) = self.references();
         match reference.usage {
-            SecureEnclaveUsageFfi::Signing => Ok(signing.public_key_x963),
-            SecureEnclaveUsageFfi::KeyAgreement => Ok(encryption.public_key_x963),
+            SecureEnclaveUsageFfi::Signing => Ok(self
+                .signing_key(&reference)?
+                .verifying_key()
+                .to_encoded_point(false)
+                .as_bytes()
+                .to_vec()),
+            SecureEnclaveUsageFfi::KeyAgreement => Ok(self.references().1.public_key_x963),
         }
     }
 
@@ -110,7 +144,8 @@ impl SecureEnclaveOperations for TestP256Provider {
         digest: Vec<u8>,
     ) -> Result<Vec<u8>, SecureEnclaveErrorFfi> {
         self.validate(&reference)?;
-        if reference.public_key_x963 != self.references().0.public_key_x963 {
+        let signing = self.signing_key(&reference)?;
+        if reference.public_key_x963 != signing.verifying_key().to_encoded_point(false).as_bytes() {
             return Err(SecureEnclaveErrorFfi::InvalidReference);
         }
         self.check_fault()?;
@@ -121,8 +156,7 @@ impl SecureEnclaveOperations for TestP256Provider {
         if matches!(*self.fault.lock().unwrap(), Fault::Malformed) {
             return Ok(vec![0; 63]);
         }
-        let signature: p256::ecdsa::Signature = self
-            .signing
+        let signature: p256::ecdsa::Signature = signing
             .sign_prehash(&digest)
             .map_err(|_| SecureEnclaveErrorFfi::InvalidResponse)?;
         Ok(signature.to_bytes().to_vec())
@@ -160,12 +194,62 @@ fn fixture() -> (
     let generated = engine
         .generate_secure_enclave_key(
             "Secure Enclave FFI <se-ffi@example.invalid>".to_owned(),
+            provider.certification_reference(),
             signing,
             encryption,
             provider.clone(),
         )
         .unwrap();
     (engine, generated, provider)
+}
+
+fn legacy_fixture() -> (
+    OpenPgpEngine,
+    SecureEnclaveGeneratedKeyFfi,
+    Arc<TestP256Provider>,
+) {
+    let engine = OpenPgpEngine::new();
+    let provider = Arc::new(TestP256Provider::new());
+    let (signing, encryption) = provider.references();
+    let (_, signing_key, encryption_key, operations) = crate::secure_enclave::new_components(
+        provider.certification_reference(),
+        signing,
+        encryption,
+        provider.clone(),
+    )
+    .unwrap();
+    let generated = engine
+        .lock()
+        .unwrap()
+        .generate_external_p256(
+            "Legacy hybrid FFI <legacy-hybrid@example.invalid>",
+            &signing_key,
+            &encryption_key,
+        )
+        .unwrap();
+    let binding = crate::SecureEnclaveBindingFfi {
+        certificate_fingerprint: generated.metadata.fingerprint.to_string(),
+        public_certificate: generated.public_certificate.clone(),
+        signing_component_fingerprint: format!("{:X}", signing_key.public_key().fingerprint()),
+        encryption_component_fingerprint: format!(
+            "{:X}",
+            encryption_key.public_key().fingerprint()
+        ),
+        signing: operations.signing.clone(),
+        encryption: operations.encryption.clone(),
+        certification: None,
+    };
+    engine
+        .register_secure_enclave(binding.clone(), provider.clone())
+        .unwrap();
+    (
+        engine,
+        SecureEnclaveGeneratedKeyFfi {
+            generated: generated.into(),
+            binding,
+        },
+        provider,
+    )
 }
 
 fn now() -> u64 {
@@ -189,7 +273,11 @@ fn real_p256_callbacks_cover_all_signature_formats_without_a_primary_password() 
     assert_eq!(generated.generated.summary.subkeys.len(), 2);
     assert_eq!(
         generated.generated.summary.primary.storage,
-        KeyStorageFfi::SoftwareSecret
+        KeyStorageFfi::PublicOnly
+    );
+    assert_eq!(
+        generated.binding.certification,
+        Some(provider.certification_reference())
     );
     assert!(
         generated
@@ -199,9 +287,12 @@ fn real_p256_callbacks_cover_all_signature_formats_without_a_primary_password() 
             .iter()
             .all(|key| { key.storage == KeyStorageFfi::PublicOnly })
     );
+    let snapshot = engine.storage_snapshot().unwrap();
+    assert_eq!(snapshot.len(), 1);
+    assert_eq!(snapshot[0].protected_secret, None);
     assert_eq!(
         engine.export_private_key(fingerprint.clone(), ExportFormatFfi::Binary),
-        Err(AddresseeError::ExportDisabled)
+        Err(AddresseeError::PublicKeyOnly)
     );
 
     let detached = engine
@@ -266,7 +357,7 @@ fn real_p256_callbacks_cover_all_signature_formats_without_a_primary_password() 
         verified.text.as_deref(),
         Some("first line\r\nsecond line\r\n")
     );
-    assert_eq!(provider.digests.lock().unwrap().len(), 5);
+    assert_eq!(provider.digests.lock().unwrap().len(), 8);
     assert!(
         provider
             .digests
@@ -357,8 +448,8 @@ fn snapshot_restore_requires_rebinding_the_same_device_public_keys() {
     let fingerprint = generated.generated.summary.fingerprint.clone();
     let snapshot = engine.storage_snapshot().unwrap();
     assert_eq!(snapshot.len(), 1);
-    assert!(snapshot[0].protected_secret.is_some());
-    assert_eq!(snapshot[0].export_policy, Some(ExportPolicyFfi::Disabled));
+    assert!(snapshot[0].protected_secret.is_none());
+    assert_eq!(snapshot[0].export_policy, None);
     assert_eq!(
         engine.secure_enclave_registrations().unwrap(),
         vec![generated.binding.clone()]
@@ -373,10 +464,7 @@ fn snapshot_restore_requires_rebinding_the_same_device_public_keys() {
         PAYLOAD.to_vec(),
         MessageFormatFfi::Binary,
     );
-    assert_eq!(
-        unavailable.unwrap_err(),
-        AddresseeError::UnsupportedOperation
-    );
+    assert_eq!(unavailable.unwrap_err(), AddresseeError::PublicKeyOnly);
     restored
         .register_secure_enclave(generated.binding.clone(), provider.clone())
         .unwrap();
@@ -460,9 +548,69 @@ fn public_only_binding_restoration_does_not_require_software_secret_material() {
 }
 
 #[test]
+fn legacy_hybrid_certificates_restore_and_use_only_their_hardware_subkeys() {
+    let (engine, generated, provider) = legacy_fixture();
+    let fingerprint = generated.generated.summary.fingerprint.clone();
+    assert_eq!(generated.binding.certification, None);
+    assert_eq!(
+        generated.generated.summary.primary.storage,
+        KeyStorageFfi::SoftwareSecret
+    );
+    assert_eq!(
+        engine.export_private_key(fingerprint.clone(), ExportFormatFfi::Binary),
+        Err(AddresseeError::ExportDisabled)
+    );
+    let snapshot = engine.storage_snapshot().unwrap();
+    assert!(snapshot[0].protected_secret.is_some());
+    assert_eq!(snapshot[0].export_policy, Some(ExportPolicyFfi::Disabled));
+    let encrypted = engine
+        .encrypt(
+            vec![fingerprint.clone()],
+            now(),
+            config(),
+            PAYLOAD.to_vec(),
+            MessageFormatFfi::Binary,
+        )
+        .unwrap();
+
+    let restored = OpenPgpEngine::new();
+    restored.restore_storage(snapshot).unwrap();
+    restored
+        .register_secure_enclave(generated.binding, provider)
+        .unwrap();
+    let signature = restored
+        .sign_detached(
+            fingerprint.clone(),
+            String::new(),
+            now(),
+            PAYLOAD.to_vec(),
+            MessageFormatFfi::Binary,
+        )
+        .unwrap();
+    assert_eq!(
+        restored
+            .verify_detached(PAYLOAD.to_vec(), signature.artifact, now())
+            .unwrap()
+            .status,
+        VerificationStatusFfi::Valid
+    );
+    let decrypted = restored
+        .decrypt(fingerprint, String::new(), now(), encrypted)
+        .unwrap();
+    assert_eq!(decrypted.report.status, DecryptionStatusFfi::Unsigned);
+    assert_eq!(decrypted.plaintext.as_deref(), Some(PAYLOAD));
+}
+
+#[test]
 fn export_allowed_software_primaries_cannot_be_registered_as_secure_enclave() {
-    let (engine, generated, provider) = fixture();
+    let (engine, generated, provider) = legacy_fixture();
+    assert_eq!(generated.binding.certification, None);
+    assert_eq!(
+        generated.generated.summary.primary.storage,
+        KeyStorageFfi::SoftwareSecret
+    );
     let mut snapshot = engine.storage_snapshot().unwrap();
+    assert!(snapshot[0].protected_secret.is_some());
     snapshot[0].export_policy = Some(ExportPolicyFfi::Allowed);
     let restored = OpenPgpEngine::new();
     restored.restore_storage(snapshot).unwrap();
@@ -569,6 +717,7 @@ fn invalid_references_certificates_and_component_bindings_are_rejected() {
         engine
             .generate_secure_enclave_key(
                 "Invalid reference <invalid@example.invalid>".to_owned(),
+                provider.certification_reference(),
                 signing,
                 encryption,
                 provider.clone(),
@@ -578,6 +727,14 @@ fn invalid_references_certificates_and_component_bindings_are_rejected() {
     );
 
     let (engine, generated, provider) = fixture();
+    let mut binding = generated.binding.clone();
+    binding.certification = Some(binding.signing.clone());
+    assert_eq!(
+        engine
+            .register_secure_enclave(binding, provider.clone())
+            .unwrap_err(),
+        AddresseeError::ConflictingCertificate
+    );
     let mut binding = generated.binding.clone();
     binding.signing.public_key_x963 = Arc::new(TestP256Provider::new())
         .references()
@@ -603,14 +760,27 @@ fn invalid_references_certificates_and_component_bindings_are_rejected() {
     let mut binding = generated.binding.clone();
     binding.public_certificate.push(0);
     assert!(engine.register_secure_enclave(binding, provider).is_err());
+
+    let software = OpenPgpEngine::new();
+    let generated_software = software
+        .generate_key(
+            GenerationProfileFfi::ModernV6,
+            "Independent software key <software@example.invalid>".to_owned(),
+            PASSWORD.to_owned(),
+            ExportPolicyFfi::Allowed,
+        )
+        .unwrap();
+    let protected = software
+        .export_private_key(
+            generated_software.summary.fingerprint,
+            ExportFormatFfi::Binary,
+        )
+        .unwrap();
     assert_eq!(
         engine
             .import_private_key(
-                engine.storage_snapshot().unwrap()[0]
-                    .protected_secret
-                    .clone()
-                    .unwrap(),
-                Some(PASSWORD.to_owned()),
+                protected,
+                Some("incorrect-current-password".to_owned()),
                 "another-test-only-password".to_owned(),
                 ExportPolicyFfi::Disabled,
             )
