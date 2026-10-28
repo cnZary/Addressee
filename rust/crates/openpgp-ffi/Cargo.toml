@@ -1,0 +1,27 @@
+[package]
+name = "openpgp-ffi"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[features]
+gpg-interop-test = ["openpgp-card-adapter/hardware-test"]
+
+[dependencies]
+openpgp-core = { path = "../openpgp-core" }
+openpgp-policy = { path = "../openpgp-policy" }
+openpgp-card-adapter = { path = "../openpgp-card-adapter" }
+card-backend.workspace = true
+openpgp-card.workspace = true
+pgp.workspace = true
+thiserror.workspace = true
+uniffi.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+p256.workspace = true
+rand.workspace = true

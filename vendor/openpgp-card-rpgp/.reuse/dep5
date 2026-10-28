@@ -1,0 +1,8 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: openpgp-card-rpgp
+Upstream-Contact: Heiko Schaefer <heiko@schaefer.name>
+Source: https://codeberg.org/heiko/openpgp-card-rpgp
+
+Files: tests/keys/*.tsk
+Copyright: Heiko Schaefer <heiko@schaefer.name>
+License: CC0-1.0

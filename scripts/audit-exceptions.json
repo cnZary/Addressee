@@ -1,0 +1,20 @@
+[
+  {
+    "advisory": "RUSTSEC-2023-0071",
+    "package": "rsa",
+    "version": "0.9.10",
+    "scope": "Local, user-initiated OpenPGP operations only; no network or unattended decryption oracle",
+    "justification": "The RustSec advisory states that local use on a non-compromised computer is an accepted workaround and recommends avoiding attacker-observable timing. Addressee exposes no network decryption service. RSA public-key generation, import, encryption, signing, and verification remain available; private-key decryption is local-only and the unresolved upstream risk remains documented.",
+    "reference": "https://rustsec.org/advisories/RUSTSEC-2023-0071.html",
+    "review": "Reevaluate on every rsa or rPGP change and before adding any network, background automation, or batch-decryption interface."
+  },
+  {
+    "advisory": "RUSTSEC-2026-0374",
+    "package": "basic-toml",
+    "version": "0.1.10",
+    "scope": "Build-time UniFFI binding generation through Askama; not part of the application runtime",
+    "justification": "This is an unmaintained-package warning, not a reported vulnerability. The dependency is reached only through UniFFI binding-generation templates and processes trusted repository configuration. No runtime input is accepted by this component.",
+    "reference": "https://rustsec.org/advisories/RUSTSEC-2026-0374.html",
+    "review": "Remove when UniFFI or Askama provides a maintained dependency path, and reevaluate on every binding-tool change."
+  }
+]

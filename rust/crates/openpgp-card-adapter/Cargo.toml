@@ -1,0 +1,42 @@
+[package]
+name = "openpgp-card-adapter"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+pcsc = []
+hardware-test = ["pcsc", "dep:openpgp-policy", "dep:rand"]
+
+[[bin]]
+name = "inspect-canokey"
+path = "src/bin/inspect-canokey.rs"
+required-features = ["pcsc"]
+
+[[bin]]
+name = "inspect-openpgp-card"
+path = "src/bin/inspect-openpgp-card.rs"
+required-features = ["pcsc"]
+
+[[bin]]
+name = "upload-canokey-test"
+path = "src/bin/upload-canokey-test.rs"
+required-features = ["hardware-test"]
+
+[[bin]]
+name = "exercise-canokey-test"
+path = "src/bin/exercise-canokey-test.rs"
+required-features = ["hardware-test"]
+
+[dependencies]
+openpgp-card.workspace = true
+openpgp-card-rpgp.workspace = true
+card-backend.workspace = true
+pgp.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+openpgp-core = { path = "../openpgp-core" }
+openpgp-policy = { path = "../openpgp-policy", optional = true }
+rand = { workspace = true, optional = true }

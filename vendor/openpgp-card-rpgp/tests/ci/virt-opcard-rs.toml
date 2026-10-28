@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: Heiko Schaefer <heiko@schaefer.name>
+# SPDX-License-Identifier: CC0-1.0
+
+[card.opcard-rs]
+backend.pcsc = "0000:00000000"
+config.keygen = [
+    "RSA2k", "RSA3k", "RSA4k",
+    "NIST256", "NIST384", "NIST521",
+    "Curve25519"
+]
+config.import = [
+    "tests/keys/rsa2k.tsk",
+    "tests/keys/rsa3k.tsk",
+    "tests/keys/rsa4k.tsk",
+    "tests/keys/nist256.tsk",
+    "tests/keys/nist384.tsk",
+    "tests/keys/nist521.tsk",
+    "tests/keys/25519.tsk",
+]

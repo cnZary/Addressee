@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2021 Heiko Schaefer <heiko@schaefer.name>
+# SPDX-License-Identifier: MIT OR Apache-2.0
+#
+# This configuration specifies which cards the test suite is performed on.
+#
+# NOTE: the test suite is **DESTRUCTIVE**.
+# It will **OVERWRITE** all data on test cards!
+#
+# The test suite reads the configuration from 'config/test-cards.toml'.
+# You should configure your set of test-card identifiers and store your
+# configuration in that location.
+#
+# Usually you will want to test cards via the pcsc backend, which talks
+# to smartcards via the standard PCSC lite middleware
+# (https://pcsclite.apdu.fr/).
+#
+# An alternative scdc backend is provided. It talks to smartcards via
+# scdaemon (which is part of the GnuPG system).
+# The scdc backend is not recommended for use by default, it is offered
+# for experimental use only.
+#
+# (However, note that emulated Gnuk can currently only be accessed via scdc)
+
+[card.gnuk_emu]
+#backend.pcsc = "FFFE:F1420A7A"
+backend.scdc = "D276000124010200FFFEF1420A7A0000"
+config.keygen = ["RSA2k", "NIST256", "Curve25519"]
+config.import = ["data/rsa2k.sec", "data/rsa4k.sec",
+    "data/25519.sec", "data/nist256.sec", "data/nist521.sec"]
+
+[card.yubikey5]
+backend.pcsc = "0006:16019180"
+#backend.scdc = "D2760001240103040006160191800000"
+config.keygen = [
+    "RSA2k", "RSA3k", "RSA4k",
+    "NIST256", "NIST384", "NIST521",
+    "Curve25519"
+]
+config.import = ["data/rsa2k.sec", "data/rsa4k.sec",
+    "data/25519.sec", "data/nist256.sec", "data/nist521.sec"]

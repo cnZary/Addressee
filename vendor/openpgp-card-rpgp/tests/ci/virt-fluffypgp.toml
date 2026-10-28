@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Heiko Schaefer <heiko@schaefer.name>
+# SPDX-License-Identifier: CC0-1.0
+
+[card.fluffypgp]
+backend.pcsc = "FFF1:00000001"
+config.keygen = [
+    "RSA2k"
+]
+config.import = [
+    "tests/keys/rsa2k.tsk",
+]

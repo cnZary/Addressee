@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+project_file="apps/ios/Addressee.xcodeproj/project.pbxproj"
+
+if ! git cat-file -e ":$project_file" 2>/dev/null; then
+    exit 0
+fi
+
+violations="$(
+    git show ":$project_file" | awk '
+        {
+            if (match($0, /^[[:space:]]*(DEVELOPMENT_TEAM|PRODUCT_BUNDLE_IDENTIFIER)[[:space:]]*=[[:space:]]*/)) {
+                value = substr($0, RLENGTH + 1)
+                sub(/;[[:space:]]*$/, "", value)
+                sub(/[[:space:]]*$/, "", value)
+                if (value != "" && value != "\"\"") {
+                    print $0
+                }
+            }
+        }
+    '
+)"
+
+if [[ -n "$violations" ]]; then
+    printf '拒绝提交：%s 含有非空的 DEVELOPMENT_TEAM 或 PRODUCT_BUNDLE_IDENTIFIER：\n' "$project_file" >&2
+    printf '%s\n' "$violations" >&2
+    printf '请将这些值移到 apps/ios/Config/Local.xcconfig；project.pbxproj 中仅允许字段不存在、KEY = ; 或 KEY = ""。\n' >&2
+    exit 1
+fi

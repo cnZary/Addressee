@@ -1,0 +1,104 @@
+# Security model
+
+## Current status
+
+This repository is under active development. Do not interpret compilation, a local round trip, a parser success, or a simulator result as production readiness or hardware verification. The machine-readable capability registry distinguishes operation support from validation evidence.
+
+## Release blockers
+
+- `RUSTSEC-2026-0387` remains unsuppressed. `crypto-bigint 0.5.5` is present through rPGP/RustCrypto, and no compatible reviewed upgrade to 0.7.6 currently exists. The project owner explicitly chose to keep production release blocked while development continues.
+- `cx448 0.1.1` and `hex-slice 0.1.4` have no authoritative license/notice text at their verified source revisions. Other collected notices do not substitute for these missing obligations.
+
+On 2026-10-28, the standard audit's online RustSec fetch failed with a network I/O error; it is not a successful current online audit. A separate supported invocation explicitly selected the official local snapshot at `a78282a1414d6c28cc228c4eae3570451affb0dc`, loaded 1,378 advisories, scanned all 221 locked packages, and confirmed the blockers above. The result is in `build/se-biometric-dependency-audit-snapshot-20261028.log`. It does not establish coverage of advisories added after that snapshot.
+
+## Hardware validation status
+
+On 2026-10-27, five physical Secure Enclave tests passed without skips on an iPhone 15 Pro running iOS 27.0.1. They covered exact SHA-256 ECDSA signing, ECDH agreement against an independent CryptoKit peer, OpenPGP signing and decryption with device-bound P-256 subkeys, explicit-identifier restoration and deletion, and rejection of a mismatched public-key reference. The hybrid certificate still has a password-protected software primary key; it does not make that primary key hardware-resident. These historical results used `.deviceUnlocked` subkeys and do not validate the newer biometric ACL or passwordless generation. Evidence is in `build/SecureEnclavePeerVerification5-20261027.xcresult`.
+
+GnuPG 2.5.24 imported the exported public certificate, verified detached, attached, and cleartext signatures, and rejected a modified detached-signature payload. The device decrypted GnuPG encrypt-only and signed-plus-encrypted messages, and verified the independent embedded signature. The two-phase results are recorded in `build/secure-enclave-interoperability-complete-20261027/verification.json`. Identity trust remains unestablished. GnuPG signing uses explicit SHA-256 selection; no weak-hash policy was relaxed.
+
+On 2026-10-27, the positively identified disposable CanoKey passed host PC/SC P-256 signing and decryption workflows. GnuPG verified its detached, attached, and cleartext signatures, and the application decrypted GnuPG encrypt-only and signed-plus-encrypted messages through the card. This is evidence for that card, those v4 P-256 components, and that host transport only. GnuPG private card operations, other cards and algorithms, physical Extended Length APDUs, GET RESPONSE continuation, and command chaining remain unverified.
+
+The native application connection path is vendor-neutral; the CanoKey-specific destructive-test allowlist is not a compatibility claim for other cards. No YubiKey was modified or used as a fallback. The physical API probe reported Core NFC and CryptoTokenKit availability but zero USB readers, without transmitting APDUs. One native NFC association attempt failed with Core NFC Error 102 (`No response from tag`); a later attempt stopped at certificate-binding validation. Neither requested a PIN or wrote card configuration. The same certificate passed host-side binding, but the native failure is not yet diagnosed. These are not successful native association, short-session closure, or NFC private-key results. No physical card PIN or touch-policy change has been performed. Interactive physical tests are separately scheduled and are not expected to run unattended.
+
+## Key protection
+
+Software private keys must be protected by authenticated encryption at rest and an appropriate OpenPGP secret-key protection mechanism. Storage keys must use device-only Keychain accessibility where available. Passwords, smart-card PINs, plaintext private keys, session keys, and decrypted message contents must not be logged.
+
+The software envelope implementation uses AES-256-GCM with a fresh nonce, a 256-bit wrapping key in a `WhenUnlockedThisDeviceOnly` generic-password Keychain item, and the canonical fingerprint plus export policy as authenticated additional data. Envelope format changes require a new version. The package-scoped unseal operation is not a public application export API. A wrapping key is never replaced merely because a duplicate item is encountered, and deleting it makes the corresponding ciphertext undecryptable.
+
+On 2026-10-24, an opt-in macOS Keychain test passed authenticated round trips, distinct nonces, policy and ciphertext tamper rejection, and deletion followed by decryption failure. This validates the tested storage path only; it does not prove hardware non-exportability or iOS Secure Enclave behavior.
+
+## Protected software-key persistence
+
+Engine snapshots keep each secret key in its original password-protected OpenPGP form. No user password or PIN is persisted, and restoration never re-encrypts keys with a stored password. Restored records therefore require the original password for later private-key operations.
+
+Each record is a versioned JSON file in the app's Application Support store. Only public certificates and metadata appear in plaintext; protected secret material is sealed by the AES-256-GCM envelope described above. Store files and the store directory use complete iOS file protection, and a failure to apply it aborts the write rather than silently weakening storage.
+
+Restoration re-derives every fingerprint from the key material, verifies certificate bindings, rejects unprotected secret components, and never downgrades an existing secret record to public-only. Export policy is preserved, so an export-disabled key remains non-exportable after restoration: sealed storage is not an alternative OpenPGP export path. OpenPGP secret-key ciphertext has no authentication of its own, so tamper evidence belongs to the outer authenticated envelope rather than to packet parsing.
+
+Saving replaces the complete record set and removes stale files and wrapping keys, so deleted keys cannot reappear on the next launch. Key deletion removes both the record file and its wrapping key. Fingerprints are validated before a deletion path is constructed, and a record's filename must match its embedded fingerprint. The production model uses the live store; the UI test harness can disable persistence through a launch argument to keep launches deterministic.
+
+The app already declares `keychain-access-groups` in `Addressee.entitlements`. Simulator persistence tests must sign the app and test bundles (the scripts use ad-hoc signing) so that entitlement takes effect; an unsigned test host fails Keychain access with `-34018`. The two model-level persistence tests cover generate, restore across engine instances, signing with the original password, preserved export policy, public-only records, and deletion. They use an isolated Keychain service and remove test wrapping keys during teardown. Four file-store tests additionally cover path-traversal rejection and filename/fingerprint mismatches, with the Keychain integration case explicitly enabled.
+
+Secure Enclave keys are generated on the device and are not importable or exportable as raw private keys. Apple limits this provider to P-256 operations. The application must not claim Ed25519, X25519, RSA, P-384, P-521, Ed448, X448, or Brainpool support in the Secure Enclave.
+
+New application subkeys use `.privateKeyUsage` and `.biometryAny`, requiring Touch ID or Face ID for private-key operations without device-passcode fallback. `.userPresence` is a distinct biometry-or-passcode option, not the application's biometric-only policy. No interactive physical test of this new ACL has been performed. Older keys retain their original ACLs; they are not recreated or silently migrated. Binding records created before access-control metadata was introduced default to the legacy `.deviceUnlocked` label. This local metadata does not change an ACL or prove that a legacy key has biometric protection.
+
+The v4 hybrid certificate still has a protected software certification primary key; it is not hardware-resident. New generation no longer asks for a user password. A cryptographically random, one-time internal passphrase protects the primary's OpenPGP secret-key packet while the initial bindings are constructed, and is then discarded rather than persisted. Consequently, this primary cannot later certify, revoke, or recover the certificate through a user-known password. Current message operations use only the hardware subkeys. This design must not be described as a hardware primary or as a recoverable offline-primary configuration.
+
+A device-bound encryption key has a material recovery risk: loss of the device or key can make messages encrypted only to that key permanently undecryptable. An offline primary key does not recover such messages. Biometric enrollment changes do not invalidate `.biometryAny` keys, but deletion, device loss, or an unavailable required biometric can still prevent access. The optional `.biometryCurrentSet` policy additionally invalidates keys after enrollment changes and is not used for new application encryption keys.
+
+Software export-disabled policy is an application-level restriction, not a hardware security guarantee. Export checks belong in the core service and FFI boundary, not only in UI controls.
+
+## Algorithm policy
+
+New identities default to RFC 9580 v6 Ed25519/X25519. RSA generation is limited to an explicitly selected v4 legacy compatibility profile and uses general-purpose RSA algorithm identifiers. Deprecated RSA sign-only and encrypt-only identifiers must not be generated.
+
+New signatures must not use MD5 or SHA-1. New messages must not default to IDEA or TripleDES. Legacy verification or decryption requires an explicit policy result that surfaces algorithm weakness separately from cryptographic validity and identity trust.
+
+Decryption success is not signature validity. Message integrity must be validated before plaintext is presented as authenticated. Cryptographic signature validity, certificate validity, and identity trust are separate outcomes.
+
+Detached, attached, cleartext, and sign-then-encrypt operations write the caller-supplied evaluation time into the hashed Signature Creation Time subpacket. They preserve the default issuer fingerprint and, for v4 only, the legacy issuer Key ID rather than independently sampling the wall clock during packet construction. A timestamp outside the OpenPGP 32-bit range is rejected before the private-key operation. Verification evaluates signature time, expiration, revocation, binding validity, and Key Flags at the supplied time; there is no future-time allowance for signatures or revocations.
+
+## RSA timing side-channel boundary
+
+The locked rPGP dependency currently resolves `rsa 0.9.10`, which is covered by RUSTSEC-2023-0071 (Marvin Attack). RustSec reports no patched stable release and documents local use on a non-compromised computer as a workaround when attackers cannot observe timing.
+
+Addressee must not expose a network service, remote automation endpoint, or unattended/batch RSA decryption oracle. RSA private-key operations are limited to local, user-initiated OpenPGP workflows. The unresolved upstream risk and this exact scope are recorded in `scripts/audit-exceptions.json`; the exception expires for review when the package version or application exposure changes. Public-key RSA operations and local compatibility support must not be described as evidence that the upstream timing issue is fixed.
+
+## Smart-card safety
+
+Normal builds and tests do not access physical cards. A destructive test requires all of the following after every connection:
+
+1. An explicitly selected reader, never the first enumerated card.
+2. Matching CanoKey USB vendor and product IDs.
+3. Matching expected USB serial identity.
+4. A selected OpenPGP application with the expected manufacturer and card serial in its AID.
+5. A separate runtime destructive-test authorization.
+
+Any ambiguity, reconnect, unexpected PIN failure, card occupancy conflict, or YubiKey identification aborts the operation. No fallback device is allowed. The Git-signing YubiKey must never be reset, reconfigured, written, or subjected to PIN attempts.
+
+Short and Extended Length APDUs, response continuation, and command chaining are distinct mechanisms. Responses must never be truncated. Continuation and correction loops must be bounded. Non-idempotent commands must not be blindly retried.
+
+## Native OpenPGP card sessions
+
+The application implements vendor-neutral OpenPGP Card connections through Core NFC and CryptoTokenKit; the latter still requires iOS provisioning and hardware validation. It does not use a manufacturer runtime SDK or apply the CanoKey-only destructive-test allowlist to ordinary application connections. An imported public certificate and explicit v4 subkey selections are required before the UI starts a connection. The implementation reads the actual OpenPGP identity, checks it again when creating the session, and verifies the selected component fingerprint, creation time, algorithm attributes, and public key material before registering a remote key. A component mismatch does not trigger a PIN request or private-key operation.
+
+A persistent association stores only the public-certificate binding, card identity, and selected components, not a transport, reader, PIN, or live session. Version-1 records containing a historical connection method remain readable, but those fields are ignored and omitted on the next write. A separate last-used transport preference is only a UI default. Every private-key or management operation selects NFC or an exact USB reader for that operation; there is no fallback to another reader or card. Restoring an association reserves the binding without attaching a private-key provider or opening hardware. The FFI rejects simultaneous software-secret and card bindings for the same certificate, conflicting certificates, and private-key import while a card is bound. Deleting a bound certificate removes its association; cancelling a physical connection does not. Explicit unlinking removes both the persistent association and its reservation.
+
+USB private-key operations open one short session, revalidate the complete registration, and detach the provider before closing. NFC private-key operations request a one-shot PIN before opening the reader, then use one session to repeat identity, certificate, slot, KDF, actual PIN-length, and retry-counter validation before the private-key operation. The provider is detached and the session closed afterward; cancellation before PIN submission does not open NFC. Management sessions use the selected connection and the same identity checks but never attach a private-key provider. PIN changes and reversible Off/On touch-policy changes require an explicit user action and a new short session; Fixed, Cached Fixed, and unknown policies are rejected before PIN verification. A retry counter below two blocks PIN verification or writing, and an incorrect PIN is never retried automatically. Card key generation, import, algorithm reconfiguration, and factory reset are not exposed by this management interface. These scripted protocol and lifecycle tests are not physical-device authorization or hardware evidence.
+
+USB PIN and touch requests use short-lived native interactions coordinated from the main actor while the synchronous FFI callback waits off the main thread. NFC uses a one-shot prepared PIN bound to the operation ID, card identity, slot, and PIN purpose. Its callback cannot open another prompt behind Core NFC. The initial prompt uses conservative 6–64-byte limits and does not invent a retry count; the actual card policy remains authoritative before `VERIFY`. The PIN is cleared on consumption, cancellation, failure, and completion and is never persisted or logged. Required physical touch happens during the NFC session, guided by the system alert. The NFC touch callback does not claim that touch occurred or display an app acknowledgement behind the system UI. All NFC operations use conservative touch-if-requested instructions because touch policy is read only after connection. The system reader's `alertMessage` is updated only with localized operation-stage guidance while the session is valid; it contains no PIN, APDU, private-key, or plaintext content. Cancelling an interaction, cancelling the transport, or losing the connection must release callbacks and clear prepared secrets. The initial FFI message-operation boundary serializes operations so that one card's error state cannot be confused with another concurrent operation; this is not a performance claim.
+
+The native transports pass raw APDUs without interpreting `61xx` or `6Cxx`. CryptoTokenKit uses its public raw `transmit(_:reply:)` API rather than the high-level `send` helper, avoiding implicit transport-level length conversion or command chaining. Missing or short responses are rejected without truncation. The Rust OpenPGP Card layer handles protocol correction and bounded continuation. NFC currently remains short-only because no positive transport-specific extended-length capability has been established. CryptoTokenKit limits are derived from the reader's reported input and output sizes, account for APDU framing and status bytes, and are intersected with the card's declared capabilities. Diagnostic text contains only the operation stage, transport, an allowlisted system domain and numeric code, and a raw status word when available. It never includes arbitrary error descriptions, PINs, APDU payloads, private keys, or plaintext, and a cleanup error does not replace the original operation error. No physical Extended Length or command-chaining compatibility is inferred from these host checks.
+
+## Memory and concurrency
+
+Rust code owned by Addressee forbids unsafe blocks by default. Any future FFI exception requires a narrow review and documented invariant. Secret buffers use zeroization where practical, but zeroization cannot guarantee removal of every compiler, operating-system, Swift, or FFI copy.
+
+Hardware operations must not block the main actor. Cancellation and disconnections must end sessions without leaving callbacks waiting indefinitely. Large files use bounded streaming rather than whole-file buffers.
+
+## Verification limits
+
+Simulator tests do not validate Secure Enclave or NFC hardware. APDU mock tests do not validate a physical card. Self-generated message round trips do not establish interoperability. Physical hardware, GnuPG, and malformed-input evidence must be recorded independently.

@@ -1,0 +1,921 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		ADDE55EE2000000000000001 /* AddresseeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000001 /* AddresseeApp.swift */; };
+		ADDE55EE2000000000000002 /* AppTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000002 /* AppTab.swift */; };
+		ADDE55EE2000000000000003 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000003 /* RootTabView.swift */; };
+		ADDE55EE2000000000000004 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000004 /* EmptyStateView.swift */; };
+		ADDE55EE2000000000000005 /* KeysView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000005 /* KeysView.swift */; };
+		ADDE55EE2000000000000006 /* SignatureMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000006 /* SignatureMode.swift */; };
+		ADDE55EE2000000000000007 /* SignaturesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000007 /* SignaturesView.swift */; };
+		ADDE55EE2000000000000008 /* EncryptionMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000008 /* EncryptionMode.swift */; };
+		ADDE55EE2000000000000009 /* EncryptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000009 /* EncryptionView.swift */; };
+		ADDE55EE2000000000000010 /* MoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000010 /* MoreView.swift */; };
+		ADDE55EE2000000000000011 /* HardwareKeyManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000011 /* HardwareKeyManagementView.swift */; };
+		ADDE55EE2000000000000012 /* SecuritySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000012 /* SecuritySettingsView.swift */; };
+		ADDE55EE2000000000000013 /* ApplicationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000013 /* ApplicationSettingsView.swift */; };
+		ADDE55EE2000000000000014 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000014 /* AboutView.swift */; };
+		ADDE55EE2000000000000015 /* CryptographicOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000015 /* CryptographicOperation.swift */; };
+		ADDE55EE2000000000000016 /* ServiceAvailability.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000016 /* ServiceAvailability.swift */; };
+		ADDE55EE2000000000000017 /* KeyInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000017 /* KeyInventory.swift */; };
+		ADDE55EE2000000000000018 /* SecuritySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000018 /* SecuritySettings.swift */; };
+		ADDE55EE2000000000000019 /* AppAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000019 /* AppAppearance.swift */; };
+		ADDE55EE2000000000000020 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000020 /* Localizable.xcstrings */; };
+		ADDE55EE2000000000000021 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000021 /* Assets.xcassets */; };
+		ADDE55EE2000000000000022 /* AppTabTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000022 /* AppTabTests.swift */; };
+		ADDE55EE2000000000000023 /* ModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000023 /* ModeTests.swift */; };
+		ADDE55EE2000000000000024 /* ServiceAndStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000024 /* ServiceAndStorageTests.swift */; };
+		ADDE55EE2000000000000025 /* AddresseeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDE55EE0000000000000025 /* AddresseeUITests.swift */; };
+		ADDEF1000000000000000001 /* AlgorithmCapabilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF1000000000000000002 /* AlgorithmCapabilityService.swift */; };
+		ADDEF1000000000000000003 /* AlgorithmCapabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF1000000000000000004 /* AlgorithmCapabilityTests.swift */; };
+		ADDEF1000000000000000005 /* openpgp_ffi.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF1000000000000000006 /* openpgp_ffi.swift */; };
+		ADDEF1000000000000000007 /* AddresseeCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = ADDEF1000000000000000008 /* AddresseeCore.xcframework */; };
+		ADDEF2000000000000000007 /* OpenPGPKeyProvider in Frameworks */ = {isa = PBXBuildFile; productRef = ADDEF2000000000000000004 /* OpenPGPKeyProvider */; };
+		ADDEF2000000000000000008 /* OpenPGPAppleSecureEnclave in Frameworks */ = {isa = PBXBuildFile; productRef = ADDEF2000000000000000005 /* OpenPGPAppleSecureEnclave */; };
+		ADDEF2000000000000000009 /* AppleSmartCardTransport in Frameworks */ = {isa = PBXBuildFile; productRef = ADDEF2000000000000000006 /* AppleSmartCardTransport */; };
+		ADDEF3000000000000000004 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = ADDEF3000000000000000003 /* InfoPlist.xcstrings */; };
+		ADDEF4000000000000000001 /* GenerateKeyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF4000000000000000002 /* GenerateKeyView.swift */; };
+		ADDEF4000000000000000003 /* ImportKeyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF4000000000000000004 /* ImportKeyView.swift */; };
+		ADDEF4000000000000000005 /* KeyDetailsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF4000000000000000006 /* KeyDetailsView.swift */; };
+		ADDEF4000000000000000007 /* OpenPgpApplicationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF4000000000000000008 /* OpenPgpApplicationModel.swift */; };
+		ADDEF4000000000000000009 /* GenerationProfilePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF400000000000000000A /* GenerationProfilePresentation.swift */; };
+		ADDEF400000000000000000B /* ErrorPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF400000000000000000C /* ErrorPresenter.swift */; };
+		ADDEF400000000000000000D /* FileInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF400000000000000000E /* FileInput.swift */; };
+		ADDEF400000000000000000F /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF4000000000000000010 /* ShareSheet.swift */; };
+		ADDEF4000000000000000011 /* OpenPgpApplicationModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF4000000000000000012 /* OpenPgpApplicationModelTests.swift */; };
+		ADDEF5000000000000000002 /* MessageOperationSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF5000000000000000001 /* MessageOperationSupport.swift */; };
+		ADDEF5000000000000000004 /* MessageOperationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF5000000000000000003 /* MessageOperationViews.swift */; };
+		ADDEF5000000000000000006 /* MessageOperationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF5000000000000000005 /* MessageOperationTests.swift */; };
+		ADDEF6000000000000000002 /* SoftwareKeyPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF6000000000000000001 /* SoftwareKeyPersistence.swift */; };
+		ADDEF6000000000000000004 /* KeyPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF6000000000000000003 /* KeyPersistenceTests.swift */; };
+		ADDEF7000000000000000002 /* CardTransportBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF7000000000000000001 /* CardTransportBridge.swift */; };
+		ADDEF7000000000000000004 /* CardTransportFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF7000000000000000003 /* CardTransportFactory.swift */; };
+		ADDEF7000000000000000006 /* CardInteractionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF7000000000000000005 /* CardInteractionCoordinator.swift */; };
+		ADDEF7000000000000000008 /* CardSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF7000000000000000007 /* CardSessionManager.swift */; };
+		ADDEF700000000000000000A /* CardInteractionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF7000000000000000009 /* CardInteractionViews.swift */; };
+		ADDEF700000000000000000C /* CardTransportBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF700000000000000000B /* CardTransportBridgeTests.swift */; };
+		ADDEF700000000000000000E /* CardInteractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF700000000000000000D /* CardInteractionTests.swift */; };
+		ADDEF8000000000000000001 /* SecureEnclaveDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF8000000000000000003 /* SecureEnclaveDeviceTests.swift */; };
+		ADDEF8000000000000000002 /* OpenPGPAppleSecureEnclave in Frameworks */ = {isa = PBXBuildFile; productRef = ADDEF8000000000000000004 /* OpenPGPAppleSecureEnclave */; };
+		ADDEF9000000000000000002 /* SecureEnclaveBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF9000000000000000001 /* SecureEnclaveBridge.swift */; };
+		ADDEF9000000000000000004 /* SecureEnclaveBindingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF9000000000000000003 /* SecureEnclaveBindingStore.swift */; };
+		ADDEF9000000000000000006 /* SecureEnclaveSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF9000000000000000005 /* SecureEnclaveSessionManager.swift */; };
+		ADDEF9000000000000000008 /* SecureEnclaveApplicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF9000000000000000007 /* SecureEnclaveApplicationTests.swift */; };
+		ADDEFB000000000000000001 /* AppleSmartCardDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEFB000000000000000002 /* AppleSmartCardDeviceTests.swift */; };
+		ADDEFC000000000000000001 /* CardBindingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEFC000000000000000002 /* CardBindingStore.swift */; };
+		ADDEFC000000000000000003 /* CardBindingStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEFC000000000000000004 /* CardBindingStoreTests.swift */; };
+		ADDEFC000000000000000005 /* CardSessionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEFC000000000000000006 /* CardSessionManagerTests.swift */; };
+		ADDEFC000000000000000007 /* CardDeviceManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEFC000000000000000008 /* CardDeviceManagementView.swift */; };
+		ADDEA0000000000000000001 /* CardAssociationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEA0000000000000000002 /* CardAssociationView.swift */; };
+		ADDEA0000000000000000003 /* KeyboardDismissal.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEA0000000000000000004 /* KeyboardDismissal.swift */; };
+		ADDEFD000000000000000002 /* HardwareConnectionSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEFD000000000000000001 /* HardwareConnectionSettings.swift */; };
+		ADDEFD000000000000000004 /* CardTransportFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEFD000000000000000003 /* CardTransportFactoryTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		ADDE55EE8000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ADDE55EE9000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ADDE55EE3000000000000001;
+			remoteInfo = Addressee;
+		};
+		ADDE55EE8000000000000002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ADDE55EE9000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ADDE55EE3000000000000001;
+			remoteInfo = Addressee;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		ADDE55EE0000000000000001 /* AddresseeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddresseeApp.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000002 /* AppTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTab.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000003 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000004 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000005 /* KeysView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeysView.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000006 /* SignatureMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignatureMode.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000007 /* SignaturesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignaturesView.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000008 /* EncryptionMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncryptionMode.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000009 /* EncryptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncryptionView.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000010 /* MoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreView.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000011 /* HardwareKeyManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareKeyManagementView.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000012 /* SecuritySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecuritySettingsView.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000013 /* ApplicationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationSettingsView.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000014 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000015 /* CryptographicOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptographicOperation.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000016 /* ServiceAvailability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceAvailability.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000017 /* KeyInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyInventory.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000018 /* SecuritySettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecuritySettings.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000019 /* AppAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAppearance.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000020 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		ADDE55EE0000000000000021 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		ADDE55EE0000000000000022 /* AppTabTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTabTests.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000023 /* ModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModeTests.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000024 /* ServiceAndStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceAndStorageTests.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000025 /* AddresseeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddresseeUITests.swift; sourceTree = "<group>"; };
+		ADDE55EE0000000000000026 /* Addressee.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Addressee.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		ADDE55EE0000000000000027 /* AddresseeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AddresseeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		ADDE55EE0000000000000028 /* AddresseeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AddresseeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		ADDEC0DE0000000000000001 /* Addressee.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Addressee.xcconfig; sourceTree = "<group>"; };
+		ADDEC0DE0000000000000002 /* AddresseeTests.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = AddresseeTests.xcconfig; sourceTree = "<group>"; };
+		ADDEC0DE0000000000000003 /* AddresseeUITests.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = AddresseeUITests.xcconfig; sourceTree = "<group>"; };
+		ADDEF1000000000000000002 /* AlgorithmCapabilityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlgorithmCapabilityService.swift; sourceTree = "<group>"; };
+		ADDEF1000000000000000004 /* AlgorithmCapabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlgorithmCapabilityTests.swift; sourceTree = "<group>"; };
+		ADDEF1000000000000000006 /* openpgp_ffi.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = openpgp_ffi.swift; sourceTree = "<group>"; };
+		ADDEF1000000000000000008 /* AddresseeCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = AddresseeCore.xcframework; sourceTree = "<group>"; };
+		ADDEF3000000000000000001 /* Addressee.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Addressee.entitlements; sourceTree = "<group>"; };
+		ADDEF3000000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		ADDEF3000000000000000003 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
+		ADDEF4000000000000000002 /* GenerateKeyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerateKeyView.swift; sourceTree = "<group>"; };
+		ADDEF4000000000000000004 /* ImportKeyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportKeyView.swift; sourceTree = "<group>"; };
+		ADDEF4000000000000000006 /* KeyDetailsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyDetailsView.swift; sourceTree = "<group>"; };
+		ADDEF4000000000000000008 /* OpenPgpApplicationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenPgpApplicationModel.swift; sourceTree = "<group>"; };
+		ADDEF400000000000000000A /* GenerationProfilePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationProfilePresentation.swift; sourceTree = "<group>"; };
+		ADDEF400000000000000000C /* ErrorPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorPresenter.swift; sourceTree = "<group>"; };
+		ADDEF400000000000000000E /* FileInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileInput.swift; sourceTree = "<group>"; };
+		ADDEF4000000000000000010 /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
+		ADDEF4000000000000000012 /* OpenPgpApplicationModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenPgpApplicationModelTests.swift; sourceTree = "<group>"; };
+		ADDEF5000000000000000001 /* MessageOperationSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageOperationSupport.swift; sourceTree = "<group>"; };
+		ADDEF5000000000000000003 /* MessageOperationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageOperationViews.swift; sourceTree = "<group>"; };
+		ADDEF5000000000000000005 /* MessageOperationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageOperationTests.swift; sourceTree = "<group>"; };
+		ADDEF6000000000000000001 /* SoftwareKeyPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftwareKeyPersistence.swift; sourceTree = "<group>"; };
+		ADDEF6000000000000000003 /* KeyPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyPersistenceTests.swift; sourceTree = "<group>"; };
+		ADDEF7000000000000000001 /* CardTransportBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardTransportBridge.swift; sourceTree = "<group>"; };
+		ADDEF7000000000000000003 /* CardTransportFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardTransportFactory.swift; sourceTree = "<group>"; };
+		ADDEF7000000000000000005 /* CardInteractionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardInteractionCoordinator.swift; sourceTree = "<group>"; };
+		ADDEF7000000000000000007 /* CardSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardSessionManager.swift; sourceTree = "<group>"; };
+		ADDEF7000000000000000009 /* CardInteractionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardInteractionViews.swift; sourceTree = "<group>"; };
+		ADDEF700000000000000000B /* CardTransportBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardTransportBridgeTests.swift; sourceTree = "<group>"; };
+		ADDEF700000000000000000D /* CardInteractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardInteractionTests.swift; sourceTree = "<group>"; };
+		ADDEF8000000000000000003 /* SecureEnclaveDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureEnclaveDeviceTests.swift; sourceTree = "<group>"; };
+		ADDEF9000000000000000001 /* SecureEnclaveBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureEnclaveBridge.swift; sourceTree = "<group>"; };
+		ADDEF9000000000000000003 /* SecureEnclaveBindingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureEnclaveBindingStore.swift; sourceTree = "<group>"; };
+		ADDEF9000000000000000005 /* SecureEnclaveSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureEnclaveSessionManager.swift; sourceTree = "<group>"; };
+		ADDEF9000000000000000007 /* SecureEnclaveApplicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureEnclaveApplicationTests.swift; sourceTree = "<group>"; };
+		ADDEFB000000000000000002 /* AppleSmartCardDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSmartCardDeviceTests.swift; sourceTree = "<group>"; };
+		ADDEFC000000000000000002 /* CardBindingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardBindingStore.swift; sourceTree = "<group>"; };
+		ADDEFC000000000000000004 /* CardBindingStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardBindingStoreTests.swift; sourceTree = "<group>"; };
+		ADDEFC000000000000000006 /* CardSessionManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardSessionManagerTests.swift; sourceTree = "<group>"; };
+		ADDEFC000000000000000008 /* CardDeviceManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardDeviceManagementView.swift; sourceTree = "<group>"; };
+		ADDEA0000000000000000002 /* CardAssociationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardAssociationView.swift; sourceTree = "<group>"; };
+		ADDEA0000000000000000004 /* KeyboardDismissal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardDismissal.swift; sourceTree = "<group>"; };
+		ADDEFD000000000000000001 /* HardwareConnectionSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareConnectionSettings.swift; sourceTree = "<group>"; };
+		ADDEFD000000000000000003 /* CardTransportFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardTransportFactoryTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		ADDE55EE4000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ADDEF1000000000000000007 /* AddresseeCore.xcframework in Frameworks */,
+				ADDEF2000000000000000007 /* OpenPGPKeyProvider in Frameworks */,
+				ADDEF2000000000000000008 /* OpenPGPAppleSecureEnclave in Frameworks */,
+				ADDEF2000000000000000009 /* AppleSmartCardTransport in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ADDE55EE4000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ADDEF8000000000000000002 /* OpenPGPAppleSecureEnclave in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ADDE55EE4000000000000008 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		ADDE55EE1000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE1000000000000002 /* Addressee */,
+				ADDE55EE1000000000000013 /* AddresseeTests */,
+				ADDE55EE1000000000000014 /* AddresseeUITests */,
+				ADDEC0DE0000000000000004 /* Config */,
+				ADDEF1000000000000000009 /* Generated */,
+				ADDEF100000000000000000A /* XCFrameworks */,
+				ADDE55EE1000000000000015 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		ADDE55EE1000000000000002 /* Addressee */ = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE1000000000000003 /* App */,
+				ADDE55EE1000000000000004 /* Navigation */,
+				ADDE55EE1000000000000005 /* Features */,
+				ADDE55EE1000000000000010 /* Services */,
+				ADDE55EE1000000000000011 /* Storage */,
+				ADDE55EE1000000000000012 /* Resources */,
+				ADDEF3000000000000000001 /* Addressee.entitlements */,
+			);
+			path = Addressee;
+			sourceTree = "<group>";
+		};
+		ADDE55EE1000000000000003 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE0000000000000001 /* AddresseeApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		ADDE55EE1000000000000004 /* Navigation */ = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE0000000000000002 /* AppTab.swift */,
+				ADDE55EE0000000000000003 /* RootTabView.swift */,
+				ADDE55EE0000000000000004 /* EmptyStateView.swift */,
+				ADDEF4000000000000000010 /* ShareSheet.swift */,
+			);
+			path = Navigation;
+			sourceTree = "<group>";
+		};
+		ADDE55EE1000000000000005 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE1000000000000006 /* Keys */,
+				ADDE55EE1000000000000007 /* Signatures */,
+				ADDE55EE1000000000000008 /* Encryption */,
+				ADDE55EE1000000000000009 /* More */,
+				ADDEF5000000000000000003 /* MessageOperationViews.swift */,
+				ADDEA0000000000000000004 /* KeyboardDismissal.swift */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		ADDE55EE1000000000000006 /* Keys */ = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE0000000000000005 /* KeysView.swift */,
+				ADDEF4000000000000000002 /* GenerateKeyView.swift */,
+				ADDEF4000000000000000004 /* ImportKeyView.swift */,
+				ADDEF4000000000000000006 /* KeyDetailsView.swift */,
+				ADDEA0000000000000000002 /* CardAssociationView.swift */,
+			);
+			path = Keys;
+			sourceTree = "<group>";
+		};
+		ADDE55EE1000000000000007 /* Signatures */ = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE0000000000000006 /* SignatureMode.swift */,
+				ADDE55EE0000000000000007 /* SignaturesView.swift */,
+			);
+			path = Signatures;
+			sourceTree = "<group>";
+		};
+		ADDE55EE1000000000000008 /* Encryption */ = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE0000000000000008 /* EncryptionMode.swift */,
+				ADDE55EE0000000000000009 /* EncryptionView.swift */,
+			);
+			path = Encryption;
+			sourceTree = "<group>";
+		};
+		ADDE55EE1000000000000009 /* More */ = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE0000000000000010 /* MoreView.swift */,
+				ADDE55EE0000000000000011 /* HardwareKeyManagementView.swift */,
+				ADDEFC000000000000000008 /* CardDeviceManagementView.swift */,
+				ADDE55EE0000000000000012 /* SecuritySettingsView.swift */,
+				ADDE55EE0000000000000013 /* ApplicationSettingsView.swift */,
+				ADDE55EE0000000000000014 /* AboutView.swift */,
+				ADDEF7000000000000000009 /* CardInteractionViews.swift */,
+			);
+			path = More;
+			sourceTree = "<group>";
+		};
+		ADDE55EE1000000000000010 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE0000000000000015 /* CryptographicOperation.swift */,
+				ADDE55EE0000000000000016 /* ServiceAvailability.swift */,
+				ADDEF1000000000000000002 /* AlgorithmCapabilityService.swift */,
+				ADDEF4000000000000000008 /* OpenPgpApplicationModel.swift */,
+				ADDEF400000000000000000A /* GenerationProfilePresentation.swift */,
+				ADDEF400000000000000000C /* ErrorPresenter.swift */,
+				ADDEF400000000000000000E /* FileInput.swift */,
+				ADDEF5000000000000000001 /* MessageOperationSupport.swift */,
+				ADDEF6000000000000000001 /* SoftwareKeyPersistence.swift */,
+				ADDEF7000000000000000001 /* CardTransportBridge.swift */,
+				ADDEF7000000000000000003 /* CardTransportFactory.swift */,
+				ADDEF7000000000000000005 /* CardInteractionCoordinator.swift */,
+				ADDEF7000000000000000007 /* CardSessionManager.swift */,
+				ADDEF9000000000000000001 /* SecureEnclaveBridge.swift */,
+				ADDEF9000000000000000003 /* SecureEnclaveBindingStore.swift */,
+				ADDEF9000000000000000005 /* SecureEnclaveSessionManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		ADDE55EE1000000000000011 /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE0000000000000017 /* KeyInventory.swift */,
+				ADDE55EE0000000000000018 /* SecuritySettings.swift */,
+				ADDE55EE0000000000000019 /* AppAppearance.swift */,
+				ADDEFD000000000000000001 /* HardwareConnectionSettings.swift */,
+				ADDEFC000000000000000002 /* CardBindingStore.swift */,
+			);
+			path = Storage;
+			sourceTree = "<group>";
+		};
+		ADDE55EE1000000000000012 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE0000000000000020 /* Localizable.xcstrings */,
+				ADDE55EE0000000000000021 /* Assets.xcassets */,
+				ADDEF3000000000000000002 /* Info.plist */,
+				ADDEF3000000000000000003 /* InfoPlist.xcstrings */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		ADDE55EE1000000000000013 /* AddresseeTests */ = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE0000000000000022 /* AppTabTests.swift */,
+				ADDE55EE0000000000000023 /* ModeTests.swift */,
+				ADDE55EE0000000000000024 /* ServiceAndStorageTests.swift */,
+				ADDEF1000000000000000004 /* AlgorithmCapabilityTests.swift */,
+				ADDEF4000000000000000012 /* OpenPgpApplicationModelTests.swift */,
+				ADDEF5000000000000000005 /* MessageOperationTests.swift */,
+				ADDEF6000000000000000003 /* KeyPersistenceTests.swift */,
+				ADDEF700000000000000000B /* CardTransportBridgeTests.swift */,
+				ADDEF700000000000000000D /* CardInteractionTests.swift */,
+				ADDEFD000000000000000003 /* CardTransportFactoryTests.swift */,
+				ADDEFB000000000000000002 /* AppleSmartCardDeviceTests.swift */,
+				ADDEF8000000000000000003 /* SecureEnclaveDeviceTests.swift */,
+				ADDEF9000000000000000007 /* SecureEnclaveApplicationTests.swift */,
+				ADDEFC000000000000000004 /* CardBindingStoreTests.swift */,
+				ADDEFC000000000000000006 /* CardSessionManagerTests.swift */,
+			);
+			path = AddresseeTests;
+			sourceTree = "<group>";
+		};
+		ADDE55EE1000000000000014 /* AddresseeUITests */ = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE0000000000000025 /* AddresseeUITests.swift */,
+			);
+			path = AddresseeUITests;
+			sourceTree = "<group>";
+		};
+		ADDE55EE1000000000000015 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				ADDE55EE0000000000000026 /* Addressee.app */,
+				ADDE55EE0000000000000027 /* AddresseeTests.xctest */,
+				ADDE55EE0000000000000028 /* AddresseeUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		ADDEC0DE0000000000000004 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				ADDEC0DE0000000000000001 /* Addressee.xcconfig */,
+				ADDEC0DE0000000000000002 /* AddresseeTests.xcconfig */,
+				ADDEC0DE0000000000000003 /* AddresseeUITests.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		ADDEF1000000000000000009 /* Generated */ = {
+			isa = PBXGroup;
+			children = (
+				ADDEF1000000000000000006 /* openpgp_ffi.swift */,
+			);
+			path = Generated;
+			sourceTree = "<group>";
+		};
+		ADDEF100000000000000000A /* XCFrameworks */ = {
+			isa = PBXGroup;
+			children = (
+				ADDEF1000000000000000008 /* AddresseeCore.xcframework */,
+			);
+			path = XCFrameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		ADDE55EE3000000000000001 /* Addressee */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ADDE55EE6000000000000002 /* Build configuration list for PBXNativeTarget "Addressee" */;
+			buildPhases = (
+				ADDE55EE4000000000000001 /* Sources */,
+				ADDE55EE4000000000000002 /* Frameworks */,
+				ADDE55EE4000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Addressee;
+			packageProductDependencies = (
+				ADDEF2000000000000000004 /* OpenPGPKeyProvider */,
+				ADDEF2000000000000000005 /* OpenPGPAppleSecureEnclave */,
+				ADDEF2000000000000000006 /* AppleSmartCardTransport */,
+			);
+			productName = Addressee;
+			productReference = ADDE55EE0000000000000026 /* Addressee.app */;
+			productType = "com.apple.product-type.application";
+		};
+		ADDE55EE3000000000000002 /* AddresseeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ADDE55EE6000000000000003 /* Build configuration list for PBXNativeTarget "AddresseeTests" */;
+			buildPhases = (
+				ADDE55EE4000000000000004 /* Sources */,
+				ADDE55EE4000000000000005 /* Frameworks */,
+				ADDE55EE4000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				ADDE55EE7000000000000001 /* PBXTargetDependency */,
+			);
+			name = AddresseeTests;
+			packageProductDependencies = (
+				ADDEF8000000000000000004 /* OpenPGPAppleSecureEnclave */,
+			);
+			productName = AddresseeTests;
+			productReference = ADDE55EE0000000000000027 /* AddresseeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		ADDE55EE3000000000000003 /* AddresseeUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ADDE55EE6000000000000004 /* Build configuration list for PBXNativeTarget "AddresseeUITests" */;
+			buildPhases = (
+				ADDE55EE4000000000000007 /* Sources */,
+				ADDE55EE4000000000000008 /* Frameworks */,
+				ADDE55EE4000000000000009 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				ADDE55EE7000000000000002 /* PBXTargetDependency */,
+			);
+			name = AddresseeUITests;
+			productName = AddresseeUITests;
+			productReference = ADDE55EE0000000000000028 /* AddresseeUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		ADDE55EE9000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					ADDE55EE3000000000000001 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					ADDE55EE3000000000000002 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = ADDE55EE3000000000000001;
+					};
+					ADDE55EE3000000000000003 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = ADDE55EE3000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = ADDE55EE6000000000000001 /* Build configuration list for PBXProject "Addressee" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				"zh-Hans",
+			);
+			mainGroup = ADDE55EE1000000000000001;
+			packageReferences = (
+				ADDEF2000000000000000001 /* XCLocalSwiftPackageReference "../../packages/openpgp-key-provider" */,
+				ADDEF2000000000000000002 /* XCLocalSwiftPackageReference "../../packages/openpgp-apple-se" */,
+				ADDEF2000000000000000003 /* XCLocalSwiftPackageReference "../../packages/apple-smartcard-transport" */,
+			);
+			productRefGroup = ADDE55EE1000000000000015 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				ADDE55EE3000000000000001 /* Addressee */,
+				ADDE55EE3000000000000002 /* AddresseeTests */,
+				ADDE55EE3000000000000003 /* AddresseeUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		ADDE55EE4000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ADDE55EE2000000000000020 /* Localizable.xcstrings in Resources */,
+				ADDE55EE2000000000000021 /* Assets.xcassets in Resources */,
+				ADDEF3000000000000000004 /* InfoPlist.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ADDE55EE4000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ADDE55EE4000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		ADDE55EE4000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ADDE55EE2000000000000001 /* AddresseeApp.swift in Sources */,
+				ADDE55EE2000000000000002 /* AppTab.swift in Sources */,
+				ADDE55EE2000000000000003 /* RootTabView.swift in Sources */,
+				ADDE55EE2000000000000004 /* EmptyStateView.swift in Sources */,
+				ADDE55EE2000000000000005 /* KeysView.swift in Sources */,
+				ADDE55EE2000000000000006 /* SignatureMode.swift in Sources */,
+				ADDE55EE2000000000000007 /* SignaturesView.swift in Sources */,
+				ADDE55EE2000000000000008 /* EncryptionMode.swift in Sources */,
+				ADDE55EE2000000000000009 /* EncryptionView.swift in Sources */,
+				ADDE55EE2000000000000010 /* MoreView.swift in Sources */,
+				ADDE55EE2000000000000011 /* HardwareKeyManagementView.swift in Sources */,
+				ADDEFC000000000000000007 /* CardDeviceManagementView.swift in Sources */,
+				ADDE55EE2000000000000012 /* SecuritySettingsView.swift in Sources */,
+				ADDE55EE2000000000000013 /* ApplicationSettingsView.swift in Sources */,
+				ADDE55EE2000000000000014 /* AboutView.swift in Sources */,
+				ADDE55EE2000000000000015 /* CryptographicOperation.swift in Sources */,
+				ADDE55EE2000000000000016 /* ServiceAvailability.swift in Sources */,
+				ADDE55EE2000000000000017 /* KeyInventory.swift in Sources */,
+				ADDE55EE2000000000000018 /* SecuritySettings.swift in Sources */,
+				ADDE55EE2000000000000019 /* AppAppearance.swift in Sources */,
+				ADDEFD000000000000000002 /* HardwareConnectionSettings.swift in Sources */,
+				ADDEF1000000000000000001 /* AlgorithmCapabilityService.swift in Sources */,
+				ADDEF1000000000000000005 /* openpgp_ffi.swift in Sources */,
+				ADDEF4000000000000000001 /* GenerateKeyView.swift in Sources */,
+				ADDEF4000000000000000003 /* ImportKeyView.swift in Sources */,
+				ADDEF4000000000000000005 /* KeyDetailsView.swift in Sources */,
+				ADDEF4000000000000000007 /* OpenPgpApplicationModel.swift in Sources */,
+				ADDEF4000000000000000009 /* GenerationProfilePresentation.swift in Sources */,
+				ADDEF400000000000000000B /* ErrorPresenter.swift in Sources */,
+				ADDEF400000000000000000D /* FileInput.swift in Sources */,
+				ADDEF400000000000000000F /* ShareSheet.swift in Sources */,
+				ADDEF5000000000000000002 /* MessageOperationSupport.swift in Sources */,
+				ADDEF6000000000000000002 /* SoftwareKeyPersistence.swift in Sources */,
+				ADDEF5000000000000000004 /* MessageOperationViews.swift in Sources */,
+				ADDEF7000000000000000002 /* CardTransportBridge.swift in Sources */,
+				ADDEF7000000000000000004 /* CardTransportFactory.swift in Sources */,
+				ADDEF7000000000000000006 /* CardInteractionCoordinator.swift in Sources */,
+				ADDEF7000000000000000008 /* CardSessionManager.swift in Sources */,
+				ADDEF700000000000000000A /* CardInteractionViews.swift in Sources */,
+				ADDEF9000000000000000002 /* SecureEnclaveBridge.swift in Sources */,
+				ADDEF9000000000000000004 /* SecureEnclaveBindingStore.swift in Sources */,
+				ADDEF9000000000000000006 /* SecureEnclaveSessionManager.swift in Sources */,
+				ADDEFC000000000000000001 /* CardBindingStore.swift in Sources */,
+				ADDEA0000000000000000001 /* CardAssociationView.swift in Sources */,
+				ADDEA0000000000000000003 /* KeyboardDismissal.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ADDE55EE4000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ADDE55EE2000000000000022 /* AppTabTests.swift in Sources */,
+				ADDE55EE2000000000000023 /* ModeTests.swift in Sources */,
+				ADDE55EE2000000000000024 /* ServiceAndStorageTests.swift in Sources */,
+				ADDEF1000000000000000003 /* AlgorithmCapabilityTests.swift in Sources */,
+				ADDEF4000000000000000011 /* OpenPgpApplicationModelTests.swift in Sources */,
+				ADDEF5000000000000000006 /* MessageOperationTests.swift in Sources */,
+				ADDEF6000000000000000004 /* KeyPersistenceTests.swift in Sources */,
+				ADDEF700000000000000000C /* CardTransportBridgeTests.swift in Sources */,
+				ADDEF700000000000000000E /* CardInteractionTests.swift in Sources */,
+				ADDEFD000000000000000004 /* CardTransportFactoryTests.swift in Sources */,
+				ADDEFB000000000000000001 /* AppleSmartCardDeviceTests.swift in Sources */,
+				ADDEF8000000000000000001 /* SecureEnclaveDeviceTests.swift in Sources */,
+				ADDEF9000000000000000008 /* SecureEnclaveApplicationTests.swift in Sources */,
+				ADDEFC000000000000000003 /* CardBindingStoreTests.swift in Sources */,
+				ADDEFC000000000000000005 /* CardSessionManagerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ADDE55EE4000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ADDE55EE2000000000000025 /* AddresseeUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		ADDE55EE7000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = ADDE55EE3000000000000001 /* Addressee */;
+			targetProxy = ADDE55EE8000000000000001 /* PBXContainerItemProxy */;
+		};
+		ADDE55EE7000000000000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = ADDE55EE3000000000000001 /* Addressee */;
+			targetProxy = ADDE55EE8000000000000002 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		ADDE55EE5000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/XCFrameworks",
+				);
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -fmodule-map-file=$(SRCROOT)/Generated/openpgp_ffiFFI.modulemap";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = "$(inherited) $(SRCROOT)/Generated";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		ADDE55EE5000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/XCFrameworks",
+				);
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -fmodule-map-file=$(SRCROOT)/Generated/openpgp_ffiFFI.modulemap";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_INCLUDE_PATHS = "$(inherited) $(SRCROOT)/Generated";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		ADDE55EE5000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = ADDEC0DE0000000000000001 /* Addressee.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Addressee/Addressee.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Addressee/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Addressee;
+				INFOPLIST_KEY_NFCReaderUsageDescription = "Hold an OpenPGP card near this iPhone to use its hardware-backed keys.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		ADDE55EE5000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = ADDEC0DE0000000000000001 /* Addressee.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Addressee/Addressee.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Addressee/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Addressee;
+				INFOPLIST_KEY_NFCReaderUsageDescription = "Hold an OpenPGP card near this iPhone to use its hardware-backed keys.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		ADDE55EE5000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = ADDEC0DE0000000000000002 /* AddresseeTests.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Addressee.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Addressee";
+				TEST_TARGET_NAME = Addressee;
+			};
+			name = Debug;
+		};
+		ADDE55EE5000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = ADDEC0DE0000000000000002 /* AddresseeTests.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Addressee.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Addressee";
+				TEST_TARGET_NAME = Addressee;
+			};
+			name = Release;
+		};
+		ADDE55EE5000000000000007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = ADDEC0DE0000000000000003 /* AddresseeUITests.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_TARGET_NAME = Addressee;
+			};
+			name = Debug;
+		};
+		ADDE55EE5000000000000008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = ADDEC0DE0000000000000003 /* AddresseeUITests.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_TARGET_NAME = Addressee;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		ADDE55EE6000000000000001 /* Build configuration list for PBXProject "Addressee" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ADDE55EE5000000000000001 /* Debug */,
+				ADDE55EE5000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		ADDE55EE6000000000000002 /* Build configuration list for PBXNativeTarget "Addressee" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ADDE55EE5000000000000003 /* Debug */,
+				ADDE55EE5000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		ADDE55EE6000000000000003 /* Build configuration list for PBXNativeTarget "AddresseeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ADDE55EE5000000000000005 /* Debug */,
+				ADDE55EE5000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		ADDE55EE6000000000000004 /* Build configuration list for PBXNativeTarget "AddresseeUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ADDE55EE5000000000000007 /* Debug */,
+				ADDE55EE5000000000000008 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		ADDEF2000000000000000001 /* XCLocalSwiftPackageReference "../../packages/openpgp-key-provider" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../../packages/openpgp-key-provider";
+		};
+		ADDEF2000000000000000002 /* XCLocalSwiftPackageReference "../../packages/openpgp-apple-se" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../../packages/openpgp-apple-se";
+		};
+		ADDEF2000000000000000003 /* XCLocalSwiftPackageReference "../../packages/apple-smartcard-transport" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../../packages/apple-smartcard-transport";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		ADDEF2000000000000000004 /* OpenPGPKeyProvider */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ADDEF2000000000000000001 /* XCLocalSwiftPackageReference "../../packages/openpgp-key-provider" */;
+			productName = OpenPGPKeyProvider;
+		};
+		ADDEF2000000000000000005 /* OpenPGPAppleSecureEnclave */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ADDEF2000000000000000002 /* XCLocalSwiftPackageReference "../../packages/openpgp-apple-se" */;
+			productName = OpenPGPAppleSecureEnclave;
+		};
+		ADDEF2000000000000000006 /* AppleSmartCardTransport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ADDEF2000000000000000003 /* XCLocalSwiftPackageReference "../../packages/apple-smartcard-transport" */;
+			productName = AppleSmartCardTransport;
+		};
+		ADDEF8000000000000000004 /* OpenPGPAppleSecureEnclave */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ADDEF2000000000000000002 /* XCLocalSwiftPackageReference "../../packages/openpgp-apple-se" */;
+			productName = OpenPGPAppleSecureEnclave;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = ADDE55EE9000000000000001 /* Project object */;
+}

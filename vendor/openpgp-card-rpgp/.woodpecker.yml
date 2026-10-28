@@ -1,0 +1,92 @@
+# SPDX-FileCopyrightText: Heiko Schaefer <heiko@schaefer.name>
+# SPDX-License-Identifier: CC0-1.0
+
+when:
+  - path: [ "src/**" , "tests/**" , "Cargo.toml", ".woodpecker.yml" ]
+    event: push
+
+steps:
+  reuse:
+    image: fsfe/reuse:latest
+
+  rustfmt:
+    image: rust
+    commands:
+      - rustup toolchain install nightly && rustup component add --toolchain nightly rustfmt
+      - cargo +nightly fmt -- --check
+
+  clippy:
+    image: rust
+    commands:
+      - rustup component add clippy
+      - apt update -y -qq && apt install -y -qq --no-install-recommends libpcsclite-dev nettle-dev libclang-dev
+      - cargo clippy --no-deps --tests --examples
+
+  virtual-opcard:
+    image: registry.gitlab.com/openpgp-card/virtual-cards/opcard-rs-tools
+    pull: true
+    depends_on: [ clippy ]
+    commands:
+      - apt update -y -qq && DEBIAN_FRONTEND=noninteractive apt install -y -qq nettle-dev
+      - sh /start.sh # Start pcscd, virtual OpenPGP card
+      - cargo --version
+
+      # Run tests
+      - TEST_CONFIG=tests/ci/virt-opcard-rs.toml cargo test import -- --ignored --nocapture
+      - TEST_CONFIG=tests/ci/virt-opcard-rs.toml cargo test keygen -- --ignored --nocapture
+
+  virtual-smartpgp:
+    image: registry.gitlab.com/openpgp-card/virtual-cards/smartpgp-tools
+    pull: true
+    depends_on: [ clippy ]
+    commands:
+      - apt update -y -qq && DEBIAN_FRONTEND=noninteractive apt install -y -qq nettle-dev
+      - sh /start.sh # Start pcscd, virtual OpenPGP card
+      - . "$HOME/.cargo/env"
+      - cargo --version
+
+      # Run tests
+      - TEST_CONFIG=tests/ci/virt-smartpgp.toml cargo test import -- --ignored --nocapture
+      - TEST_CONFIG=tests/ci/virt-smartpgp.toml cargo test keygen -- --ignored --nocapture
+
+  virtual-canokey:
+    image: registry.gitlab.com/openpgp-card/virtual-cards/canokey-builddeps
+    pull: true
+    depends_on: [ clippy ]
+    commands:
+      - apt update -y -qq && DEBIAN_FRONTEND=noninteractive apt install -y -qq nettle-dev
+      - sh /start.sh # Start pcscd, virtual OpenPGP card
+      - . "$HOME/.cargo/env"
+      - cargo --version
+
+      # Run tests
+      - TEST_CONFIG=tests/ci/virt-canokey.toml cargo test import -- --ignored --nocapture
+      - TEST_CONFIG=tests/ci/virt-canokey.toml cargo test keygen -- --ignored --nocapture
+
+  virtual-ykneo:
+    image: registry.gitlab.com/openpgp-card/virtual-cards/ykneo-builddeps
+    pull: true
+    depends_on: [ clippy ]
+    commands:
+      - apt update -y -qq && DEBIAN_FRONTEND=noninteractive apt install -y -qq nettle-dev
+      - sh /start.sh # Start pcscd, virtual OpenPGP card
+      - . "$HOME/.cargo/env"
+      - cargo --version
+
+      # Run tests
+      - TEST_CONFIG=tests/ci/virt-ykneo.toml cargo test import -- --ignored --nocapture
+      - TEST_CONFIG=tests/ci/virt-ykneo.toml cargo test keygen -- --ignored --nocapture
+
+  virtual-fluffypgp:
+    image: registry.gitlab.com/openpgp-card/virtual-cards/fluffypgp-builddeps
+    pull: true
+    depends_on: [ clippy ]
+    commands:
+      - apt update -y -qq && DEBIAN_FRONTEND=noninteractive apt install -y -qq nettle-dev
+      - sh /start.sh # Start pcscd, virtual OpenPGP card
+      - . "$HOME/.cargo/env"
+      - cargo --version
+
+      # Run tests
+      - TEST_CONFIG=tests/ci/virt-fluffypgp.toml cargo test import -- --ignored --nocapture
+      - TEST_CONFIG=tests/ci/virt-fluffypgp.toml cargo test keygen -- --ignored --nocapture

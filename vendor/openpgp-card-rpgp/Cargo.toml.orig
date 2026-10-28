@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: Heiko Schaefer <heiko@schaefer.name>
+# SPDX-License-Identifier: CC0-1.0
+
+[package]
+name = "openpgp-card-rpgp"
+description = "Companion crate for using openpgp-card with rPGP"
+version = "0.8.1"
+edition = "2024"
+authors = [
+    "Wiktor Kwapisiewicz <wiktor@metacode.biz>",
+    "Heiko Schaefer <heiko@schaefer.name>",
+]
+license = "MIT OR Apache-2.0"
+repository = "https://codeberg.org/openpgp-card/rpgp"
+documentation = "https://docs.rs/openpgp-card-rpgp"
+
+[dependencies]
+ed25519-dalek = "2"
+openpgp-card = "0.7"
+p256 = "0.13"
+p384 = "0.13"
+p521 = "0.13"
+pgp = { version = "0.20", default-features = false }
+rand = "0.8"
+rsa = "0.9"
+secrecy = "0.10"
+thiserror = "2"
+x25519-dalek = "2"
+
+[dev-dependencies]
+anyhow = "1"
+card-backend-pcsc = "0.5"
+card-backend-scdc = "0.5"
+env_logger = "0.11"
+hex = "0.4"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+testresult = "0.4"
+toml = "1"
+
+[lints.clippy]
+unimplemented = "warn"
+panic = "warn"
+expect_used = "warn"
+todo = "warn"
+unwrap_used = "warn"

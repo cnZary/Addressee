@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Heiko Schaefer <heiko@schaefer.name>
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+[package]
+name = "openpgp-card"
+description = "A client implementation for the OpenPGP card specification"
+license = "MIT OR Apache-2.0"
+version = "0.7.0"
+authors = ["Heiko Schaefer <heiko@schaefer.name>"]
+edition = "2018"
+repository = "https://codeberg.org/openpgp-card/openpgp-card"
+documentation = "https://docs.rs/crate/openpgp-card"
+
+[dependencies]
+card-backend = { path = "../card-backend", version = "0.2" }
+hex-slice = "0.1"
+log = "0.4"
+nom = "7"
+secrecy = "0.10"
+sha2 = "0.10"
+thiserror = "2"
+
+[dev-dependencies]
+hex-literal = "1"
+
+[lints.clippy]
+unimplemented = "warn"
+panic = "warn"
+expect_used = "warn"
+todo = "warn"
+unwrap_used = "warn"
