@@ -114,6 +114,104 @@ final class AppleSmartCardDeviceTests: XCTestCase {
         #endif
     }
 
+    func testUSBAssociationAndCleanClose() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["ADDRESSEE_CARD_USB_TESTS"] == "1" else {
+            throw XCTSkip("Physical USB card association requires an explicit fixture and opt-in")
+        }
+        #if targetEnvironment(simulator)
+        throw XCTSkip("This test requires a physical iOS device and an OpenPGP card")
+        #else
+        let fixture = try Self.cardFixture(environment: environment, key: "ADDRESSEE_CARD_USB_FIXTURE")
+        guard let readerName = environment["ADDRESSEE_CARD_READER_NAME"],
+              !readerName.isEmpty, readerName.count <= 1_024 else {
+            throw CardDeviceTestError.invalidTestConfiguration
+        }
+        let readers = try await CardTransportFactory().readerNames()
+        guard readers == [readerName] else {
+            XCTFail("The unique USB reader does not match the explicitly selected test reader")
+            return
+        }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CardUsbDeviceTests-\(UUID().uuidString)", isDirectory: true)
+        let store = CardBindingStore(directory: directory)
+        let interaction = CardInteractionCoordinator()
+        let engine = OpenPgpEngine()
+        let observation = CardTransportObservation()
+        let manager = CardSessionManager(
+            engine: engine,
+            interaction: interaction,
+            transports: ObservedCardTransportOpening(observation: observation),
+            store: store
+        )
+        let model = OpenPgpApplicationModel(
+            engine: engine,
+            cardInteraction: interaction,
+            cardSessions: manager
+        )
+        await model.load()
+        XCTAssertNil(model.errorMessage)
+        let imported = try await model.importPublic(fixture.publicCertificate)
+        let fingerprint = imported.summary.fingerprint
+        XCTAssertEqual(imported.summary.storage, .publicOnly)
+        addTeardownBlock { @MainActor in
+            interaction.cancelActiveInteraction()
+            if model.hasCardBinding(fingerprint: fingerprint) {
+                try? await model.disconnectCard(fingerprint: fingerprint)
+            }
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let registration = try await model.connectCard(
+            certificateFingerprint: fingerprint,
+            signingComponent: fixture.signingComponent,
+            decryptionComponent: fixture.decryptionComponent,
+            method: .usb,
+            readerName: readerName
+        )
+        XCTAssertEqual(registration.identity, fixture.identity.ffi())
+        XCTAssertEqual(model.cardRegistrations, [registration])
+        if let signing = fixture.signingComponent {
+            XCTAssertTrue(registration.components.contains {
+                $0.slot == .signing && $0.componentFingerprint == signing
+            })
+        }
+        if let decryption = fixture.decryptionComponent {
+            XCTAssertTrue(registration.components.contains {
+                $0.slot == .decryption && $0.componentFingerprint == decryption
+            })
+        }
+        let observed = await observation.snapshot()
+        XCTAssertEqual(observed.opened, 1)
+        XCTAssertEqual(observed.closed, 1)
+        XCTAssertEqual(observed.successfulCloses, 1)
+        XCTAssertEqual(observed.failures, 0)
+        let report: [String: Any] = [
+            "schemaVersion": 1,
+            "transport": "usb",
+            "readerName": readerName,
+            "certificateFingerprint": fingerprint,
+            "cardIdentity": registration.identity.displayIdentifier,
+            "association": "passed",
+            "transportOpenCount": observed.opened,
+            "transportCloseCompletionCount": observed.closed,
+            "successfulTransportCloseCompletionCount": observed.successfulCloses,
+            "transportFailureCount": observed.failures,
+            "pinSupplied": false,
+            "privateKeyOperationRequested": false,
+            "cardConfigurationWritten": false,
+            "privateKeyExportRequested": false,
+        ]
+        let attachment = XCTAttachment(
+            data: try JSONSerialization.data(withJSONObject: report, options: [.sortedKeys]),
+            uniformTypeIdentifier: "public.json"
+        )
+        attachment.name = "usb-association-result.json"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        #endif
+    }
+
     func testNFCAssociationAndShortPrivateKeySessions() async throws {
         let environment = ProcessInfo.processInfo.environment
         guard environment["ADDRESSEE_CARD_NFC_TESTS"] == "1" else {
@@ -122,7 +220,7 @@ final class AppleSmartCardDeviceTests: XCTestCase {
         #if targetEnvironment(simulator)
         throw XCTSkip("This test requires a physical iOS device and an OpenPGP card")
         #else
-        let fixture = try Self.nfcFixture(environment: environment)
+        let fixture = try Self.cardFixture(environment: environment, key: "ADDRESSEE_CARD_NFC_FIXTURE")
         guard let pin = environment["ADDRESSEE_CARD_TEST_PIN"], !pin.isEmpty else {
             throw CardNfcTestError.invalidTestConfiguration
         }
@@ -308,7 +406,7 @@ final class AppleSmartCardDeviceTests: XCTestCase {
         #endif
     }
 
-    private struct CardNfcFixture: Decodable {
+    private struct CardDeviceFixture: Decodable {
         let schemaVersion: Int
         let publicCertificate: Data
         let identity: CardIdentityRecord
@@ -316,22 +414,29 @@ final class AppleSmartCardDeviceTests: XCTestCase {
         let decryptionComponent: String?
     }
 
+    private enum CardDeviceTestError: Error {
+        case invalidTestConfiguration
+    }
+
     private enum CardNfcTestError: Error {
         case invalidTestConfiguration
     }
 
-    private static func nfcFixture(environment: [String: String]) throws -> CardNfcFixture {
-        guard let encoded = environment["ADDRESSEE_CARD_NFC_FIXTURE"],
+    private static func cardFixture(
+        environment: [String: String],
+        key: String
+    ) throws -> CardDeviceFixture {
+        guard let encoded = environment[key],
               encoded.count <= 6_000_000,
               let data = Data(base64Encoded: encoded) else {
-            throw CardNfcTestError.invalidTestConfiguration
+            throw CardDeviceTestError.invalidTestConfiguration
         }
-        let fixture = try JSONDecoder().decode(CardNfcFixture.self, from: data)
+        let fixture = try JSONDecoder().decode(CardDeviceFixture.self, from: data)
         guard fixture.schemaVersion == 1,
               !fixture.publicCertificate.isEmpty,
               fixture.publicCertificate.count <= 4 * 1024 * 1024,
               fixture.signingComponent != nil || fixture.decryptionComponent != nil else {
-            throw CardNfcTestError.invalidTestConfiguration
+            throw CardDeviceTestError.invalidTestConfiguration
         }
         return fixture
     }
