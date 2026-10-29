@@ -116,9 +116,13 @@ impl OpenPgpEngine {
         let outcome = self.with_service(|service| {
             service.verify_attached(Cursor::new(input), &mut plaintext, at_unix_seconds)
         })??;
+        let may_release = matches!(
+            outcome.status,
+            openpgp_core::VerificationStatus::Unsigned | openpgp_core::VerificationStatus::Valid
+        );
         Ok(VerificationResultFfi {
             outcome: outcome.into(),
-            plaintext: Some(plaintext),
+            plaintext: may_release.then_some(plaintext),
         })
     }
 
@@ -336,7 +340,9 @@ impl From<MessageError> for AddresseeError {
             | MessageError::SignatureLimitExceeded { .. }
             | MessageError::PlaintextLimitExceeded { .. }
             | MessageError::CompressionLimitExceeded { .. } => Self::ResourceLimit,
-            MessageError::UnsupportedHashAlgorithm(_) => Self::UnsupportedOperation,
+            MessageError::UnsupportedHashAlgorithm(_)
+            | MessageError::UnsupportedSymmetricAlgorithm(_)
+            | MessageError::UnidentifiedSymmetricAlgorithm => Self::UnsupportedOperation,
             MessageError::Key(error) => error.into(),
             MessageError::SecurityPolicy(_) => Self::UnsupportedOperation,
             MessageError::Io(_) => Self::InternalFailure,

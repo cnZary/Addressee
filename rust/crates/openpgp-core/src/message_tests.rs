@@ -2,7 +2,10 @@
 
 use std::io::Cursor;
 
-use openpgp_policy::{Algorithm, GenerationProfile, HashAlgorithm, SecurityPolicy};
+use openpgp_policy::{
+    Algorithm, GenerationProfile, HashAlgorithm, LegacyAlgorithmWarning, LegacyDisposition,
+    LegacyPolicyDecision, SecurityPolicy, SymmetricAlgorithm,
+};
 use pgp::{
     packet::{RevocationCode, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     ser::Serialize as _,
@@ -802,6 +805,388 @@ fn message_limits_are_enforced() {
         limited.decrypt(&fingerprint, PASSWORD, now, Cursor::new(&encrypted)),
         Err(MessageError::PlaintextLimitExceeded { limit: 4 })
     ));
+}
+
+#[test]
+fn legacy_hash_policy_covers_all_signature_containers_and_plaintext_release() {
+    use pgp::composed::Deserializable as _;
+
+    let (store, generated) = generate(
+        GenerationProfile::legacy_rsa_v4(
+            Algorithm::Rsa2048,
+            openpgp_policy::CompatibilityAcknowledgement::acknowledged(),
+        )
+        .unwrap(),
+    );
+    let fingerprint = generated.metadata.fingerprint;
+    let service = MessageService::new(&store, SecurityPolicy::default());
+    let at = evaluation_time();
+    let payload = b"legacy signature payload";
+    let text = "Legacy cleartext\r\n";
+
+    for (algorithm, policy_algorithm, disposition, may_release) in [
+        (
+            pgp::crypto::hash::HashAlgorithm::Md5,
+            HashAlgorithm::Md5,
+            LegacyDisposition::Reject,
+            false,
+        ),
+        (
+            pgp::crypto::hash::HashAlgorithm::Sha1,
+            HashAlgorithm::Sha1,
+            LegacyDisposition::AllowWithWarning,
+            true,
+        ),
+    ] {
+        let detached = legacy_detached(&store, &fingerprint, algorithm, payload, at);
+        let signature =
+            pgp::composed::DetachedSignature::from_bytes(Cursor::new(&detached)).unwrap();
+        let certificate = store.rpgp_public_key(&fingerprint).unwrap();
+        signature
+            .verify(&certificate.public_subkeys[0], payload)
+            .unwrap();
+
+        let verified = service
+            .verify_detached(&payload[..], &detached, at)
+            .unwrap();
+        assert_eq!(verified.signatures[0].cryptographically_valid, Some(true));
+        assert_eq!(
+            verified.signatures[0].legacy_decision,
+            LegacyPolicyDecision {
+                disposition,
+                warning: Some(LegacyAlgorithmWarning::WeakSignatureHash(policy_algorithm)),
+            }
+        );
+        assert_eq!(verified.status == VerificationStatus::Valid, may_release);
+
+        let attached = legacy_signed_message(&store, &fingerprint, algorithm, payload, at, false);
+        let mut plaintext = Vec::new();
+        let verified = service
+            .verify_attached(Cursor::new(&attached), &mut plaintext, at)
+            .unwrap();
+        assert_eq!(verified.status == VerificationStatus::Valid, may_release);
+        assert_eq!(verified.signatures[0].cryptographically_valid, Some(true));
+        assert_eq!(plaintext.is_empty(), !may_release);
+        if may_release {
+            assert_eq!(plaintext, payload);
+        }
+
+        let cleartext = legacy_cleartext(&store, &fingerprint, algorithm, text, at);
+        let verified = service.verify_cleartext(&cleartext, at).unwrap();
+        assert_eq!(
+            verified.outcome.signatures[0].cryptographically_valid,
+            Some(true)
+        );
+        assert_eq!(
+            verified.outcome.status == VerificationStatus::Valid,
+            may_release
+        );
+        assert_eq!(verified.text.as_deref(), may_release.then_some(text));
+
+        let encrypted = legacy_signed_message(&store, &fingerprint, algorithm, payload, at, true);
+        let decrypted = service
+            .decrypt(&fingerprint, PASSWORD, at, Cursor::new(&encrypted))
+            .unwrap();
+        assert_eq!(decrypted.report.may_commit_staging(), may_release);
+        assert_eq!(decrypted.plaintext.is_some(), may_release);
+        assert_eq!(
+            decrypted.report.signatures[0].legacy_decision.disposition,
+            disposition
+        );
+        assert_eq!(
+            decrypted.report.symmetric_algorithm,
+            Some(SymmetricAlgorithm::Aes256)
+        );
+        assert_eq!(
+            decrypted.report.legacy_decision,
+            LegacyPolicyDecision::default()
+        );
+
+        let mut staging = Vec::new();
+        let report = service
+            .decrypt_into(
+                &fingerprint,
+                PASSWORD,
+                at,
+                Cursor::new(&encrypted),
+                &mut staging,
+            )
+            .unwrap();
+        assert_eq!(report.may_commit_staging(), may_release);
+        assert_eq!(staging, payload);
+    }
+
+    let policy = SecurityPolicy {
+        legacy_sha1_verification: LegacyDisposition::Reject,
+        ..SecurityPolicy::default()
+    };
+    let rejecting = MessageService::new(&store, policy);
+    let detached = legacy_detached(
+        &store,
+        &fingerprint,
+        pgp::crypto::hash::HashAlgorithm::Sha1,
+        payload,
+        at,
+    );
+    let rejected = rejecting
+        .verify_detached(&payload[..], &detached, at)
+        .unwrap();
+    assert_eq!(rejected.status, VerificationStatus::Invalid);
+    assert_eq!(rejected.signatures[0].cryptographically_valid, Some(true));
+    assert_eq!(
+        rejected.signatures[0].legacy_decision.disposition,
+        LegacyDisposition::Reject
+    );
+}
+
+#[test]
+fn legacy_symmetric_policy_warns_by_default_and_blocks_rejected_plaintext() {
+    let (store, generated) = generate(GenerationProfile::nist_p256_v4());
+    let fingerprint = generated.metadata.fingerprint;
+    let certificate = store.rpgp_public_key(&fingerprint).unwrap();
+    let encryption_key = &certificate.public_subkeys[1];
+    let payload = b"legacy symmetric payload";
+    let at = evaluation_time();
+
+    for (algorithm, policy_algorithm) in [
+        (
+            pgp::crypto::sym::SymmetricKeyAlgorithm::IDEA,
+            SymmetricAlgorithm::Idea,
+        ),
+        (
+            pgp::crypto::sym::SymmetricKeyAlgorithm::TripleDES,
+            SymmetricAlgorithm::TripleDes,
+        ),
+        (
+            pgp::crypto::sym::SymmetricKeyAlgorithm::CAST5,
+            SymmetricAlgorithm::Cast5,
+        ),
+        (
+            pgp::crypto::sym::SymmetricKeyAlgorithm::Blowfish,
+            SymmetricAlgorithm::Blowfish,
+        ),
+    ] {
+        let mut rng = rand::thread_rng();
+        let mut builder =
+            pgp::composed::MessageBuilder::from_bytes("payload.bin", payload.to_vec())
+                .seipd_v1(&mut rng, algorithm);
+        builder.encrypt_to_key(&mut rng, encryption_key).unwrap();
+        let encrypted = builder.to_vec(&mut rng).unwrap();
+
+        let service = MessageService::new(&store, SecurityPolicy::default());
+        let decrypted = service
+            .decrypt(&fingerprint, PASSWORD, at, Cursor::new(&encrypted))
+            .unwrap();
+        assert_eq!(decrypted.report.status, DecryptionStatus::Unsigned);
+        assert_eq!(decrypted.plaintext.as_deref(), Some(&payload[..]));
+        assert_eq!(decrypted.report.symmetric_algorithm, Some(policy_algorithm));
+        assert_eq!(
+            decrypted.report.legacy_decision,
+            LegacyPolicyDecision {
+                disposition: LegacyDisposition::AllowWithWarning,
+                warning: Some(LegacyAlgorithmWarning::LegacySymmetricCipher(
+                    policy_algorithm
+                )),
+            }
+        );
+        assert!(decrypted.report.may_commit_staging());
+
+        let mut policy = SecurityPolicy::default();
+        match policy_algorithm {
+            SymmetricAlgorithm::Idea => policy.legacy_idea_decryption = LegacyDisposition::Reject,
+            SymmetricAlgorithm::TripleDes => {
+                policy.legacy_triple_des_decryption = LegacyDisposition::Reject;
+            }
+            SymmetricAlgorithm::Cast5 => policy.legacy_cast5_decryption = LegacyDisposition::Reject,
+            SymmetricAlgorithm::Blowfish => {
+                policy.legacy_blowfish_decryption = LegacyDisposition::Reject;
+            }
+            _ => unreachable!("legacy test algorithm"),
+        }
+        let rejecting = MessageService::new(&store, policy);
+        let rejected = rejecting
+            .decrypt(&fingerprint, PASSWORD, at, Cursor::new(&encrypted))
+            .unwrap();
+        assert_eq!(rejected.report.status, DecryptionStatus::DecryptionFailed);
+        assert_eq!(
+            rejected.report.legacy_decision.disposition,
+            LegacyDisposition::Reject
+        );
+        assert!(rejected.report.detail.is_some());
+        assert_eq!(rejected.plaintext, None);
+        assert!(!rejected.report.may_commit_staging());
+
+        let mut staging = Vec::new();
+        let report = rejecting
+            .decrypt_into(
+                &fingerprint,
+                PASSWORD,
+                at,
+                Cursor::new(&encrypted),
+                &mut staging,
+            )
+            .unwrap();
+        assert!(!report.may_commit_staging());
+        assert!(staging.is_empty());
+    }
+}
+
+#[test]
+fn modern_messages_have_symmetric_metadata_without_legacy_warnings() {
+    for profile in [
+        GenerationProfile::nist_p256_v4(),
+        GenerationProfile::modern_v6(),
+    ] {
+        let (store, generated) = generate(profile.clone());
+        let fingerprint = generated.metadata.fingerprint;
+        let service = MessageService::new(&store, SecurityPolicy::default());
+        let at = evaluation_time();
+        let payload = b"modern message payload";
+
+        let mut detached = Vec::new();
+        service
+            .sign_detached(
+                &fingerprint,
+                PASSWORD,
+                at,
+                &payload[..],
+                &mut detached,
+                MessageFormat::Binary,
+            )
+            .unwrap();
+        let verified = service
+            .verify_detached(&payload[..], &detached, at)
+            .unwrap();
+        assert_eq!(verified.status, VerificationStatus::Valid);
+        assert_eq!(
+            verified.signatures[0].legacy_decision,
+            LegacyPolicyDecision::default()
+        );
+
+        let mut encrypted = Vec::new();
+        service
+            .encrypt(
+                std::slice::from_ref(&fingerprint),
+                at,
+                profile_encryption(&profile),
+                &payload[..],
+                &mut encrypted,
+                MessageFormat::Binary,
+            )
+            .unwrap();
+        let decrypted = service
+            .decrypt(&fingerprint, PASSWORD, at, Cursor::new(&encrypted))
+            .unwrap();
+        assert_eq!(decrypted.plaintext.as_deref(), Some(&payload[..]));
+        assert!(decrypted.report.symmetric_algorithm.is_some());
+        assert_eq!(
+            decrypted.report.legacy_decision,
+            LegacyPolicyDecision::default()
+        );
+    }
+}
+
+fn legacy_detached(
+    store: &SoftwareKeyStore,
+    fingerprint: &FullFingerprint,
+    algorithm: pgp::crypto::hash::HashAlgorithm,
+    payload: &[u8],
+    at: u64,
+) -> Vec<u8> {
+    let secret = store.rpgp_secret_key(fingerprint).unwrap();
+    let signing_key = &secret.secret_subkeys[0].key;
+    pgp::composed::DetachedSignature::sign_binary_data_with_subpackets(
+        rand::thread_rng(),
+        signing_key,
+        &Password::from(PASSWORD),
+        algorithm,
+        payload,
+        legacy_subpacket_config(signing_key, at),
+    )
+    .unwrap()
+    .to_bytes()
+    .unwrap()
+}
+
+fn legacy_signed_message(
+    store: &SoftwareKeyStore,
+    fingerprint: &FullFingerprint,
+    algorithm: pgp::crypto::hash::HashAlgorithm,
+    payload: &[u8],
+    at: u64,
+    encrypt: bool,
+) -> Vec<u8> {
+    let secret = store.rpgp_secret_key(fingerprint).unwrap();
+    let signing_key = &secret.secret_subkeys[0].key;
+    let builder = pgp::composed::MessageBuilder::from_bytes("payload.bin", payload.to_vec());
+    let mut rng = rand::thread_rng();
+    if encrypt {
+        let certificate = store.rpgp_public_key(fingerprint).unwrap();
+        let mut builder =
+            builder.seipd_v1(&mut rng, pgp::crypto::sym::SymmetricKeyAlgorithm::AES256);
+        builder
+            .encrypt_to_key(&mut rng, &certificate.public_subkeys[1])
+            .unwrap();
+        builder.sign_with_subpackets(
+            signing_key,
+            Password::from(PASSWORD),
+            algorithm,
+            legacy_subpacket_config(signing_key, at),
+        );
+        builder.to_vec(&mut rng).unwrap()
+    } else {
+        let mut builder = builder;
+        builder.sign_with_subpackets(
+            signing_key,
+            Password::from(PASSWORD),
+            algorithm,
+            legacy_subpacket_config(signing_key, at),
+        );
+        builder.to_vec(&mut rng).unwrap()
+    }
+}
+
+fn legacy_cleartext(
+    store: &SoftwareKeyStore,
+    fingerprint: &FullFingerprint,
+    algorithm: pgp::crypto::hash::HashAlgorithm,
+    text: &str,
+    at: u64,
+) -> Vec<u8> {
+    let secret = store.rpgp_secret_key(fingerprint).unwrap();
+    let signing_key = &secret.secret_subkeys[0].key;
+    let mut rng = rand::thread_rng();
+    let mut config = SignatureConfig::from_key(&mut rng, signing_key, SignatureType::Text).unwrap();
+    config.hash_alg = algorithm;
+    let (hashed, unhashed) = legacy_subpackets(signing_key, at);
+    config.hashed_subpackets = hashed;
+    config.unhashed_subpackets = unhashed;
+    pgp::composed::CleartextSignedMessage::new(text, config, signing_key, &Password::from(PASSWORD))
+        .unwrap()
+        .to_armored_string(pgp::composed::ArmorOptions::default())
+        .unwrap()
+        .into_bytes()
+}
+
+fn legacy_subpacket_config(
+    key: &pgp::packet::SecretSubkey,
+    at: u64,
+) -> pgp::composed::SubpacketConfig {
+    let (hashed, unhashed) = legacy_subpackets(key, at);
+    pgp::composed::SubpacketConfig::UserDefined { hashed, unhashed }
+}
+
+fn legacy_subpackets(key: &pgp::packet::SecretSubkey, at: u64) -> (Vec<Subpacket>, Vec<Subpacket>) {
+    let hashed = vec![
+        Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::from_secs(
+            at.try_into().unwrap(),
+        )))
+        .unwrap(),
+        Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint())).unwrap(),
+    ];
+    let unhashed =
+        vec![Subpacket::regular(SubpacketData::IssuerKeyId(key.legacy_key_id())).unwrap()];
+    (hashed, unhashed)
 }
 
 fn revoked_certificate(store: &SoftwareKeyStore, fingerprint: &FullFingerprint) -> Vec<u8> {

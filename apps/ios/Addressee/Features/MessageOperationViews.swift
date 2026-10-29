@@ -268,10 +268,13 @@ struct VerificationOutcomeView: View {
     var body: some View {
         Section("verification.result") {
             MessageStatusBanner(
-                title: outcome.status.title,
-                systemImage: outcome.status.systemImage,
-                color: outcome.status.color
+                title: outcome.policyPresentation?.title ?? outcome.status.title,
+                systemImage: outcome.policyPresentation?.systemImage ?? outcome.status.systemImage,
+                color: outcome.policyPresentation?.color ?? outcome.status.color
             )
+            if let presentation = outcome.policyPresentation {
+                LegacyPolicyNotice(presentation: presentation)
+            }
             if outcome.signatures.isEmpty {
                 Text("verification.noSignatures")
                     .foregroundStyle(.secondary)
@@ -291,10 +294,13 @@ struct DecryptionReportView: View {
     var body: some View {
         Section("decryption.result") {
             MessageStatusBanner(
-                title: report.status.title,
-                systemImage: report.status.systemImage,
-                color: report.status.color
+                title: report.policyPresentation?.title ?? report.status.title,
+                systemImage: report.policyPresentation?.systemImage ?? report.status.systemImage,
+                color: report.policyPresentation?.color ?? report.status.color
             )
+            if let presentation = report.policyPresentation {
+                LegacyPolicyNotice(presentation: presentation)
+            }
             if let detail = report.detail, !detail.isEmpty {
                 Text(detail)
                     .font(.footnote)
@@ -370,6 +376,9 @@ private struct SignatureVerificationView: View {
             if let hashAlgorithm = signature.hashAlgorithm {
                 LabeledContent("verification.hashAlgorithm", value: hashAlgorithm)
             }
+            if let presentation = messagePolicyPresentation(for: [signature.legacyDecision]) {
+                LegacyPolicyNotice(presentation: presentation)
+            }
             if let createdAt = signature.createdAt {
                 LabeledContent("verification.createdAt") {
                     Text(Date(timeIntervalSince1970: TimeInterval(createdAt)), format: .dateTime)
@@ -441,6 +450,117 @@ private struct IdentityTrustNote: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+enum MessagePolicyLevel: Equatable {
+    case warning
+    case rejected
+}
+
+struct MessagePolicyPresentation: Equatable {
+    let level: MessagePolicyLevel
+    let kind: LegacyWarningKindFfi?
+    let algorithm: String?
+
+    init(level: MessagePolicyLevel, kind: LegacyWarningKindFfi?, algorithm: String?) {
+        self.level = level
+        self.kind = kind
+        self.algorithm = algorithm
+    }
+
+    init?(_ decision: LegacyPolicyDecisionFfi) {
+        guard decision.disposition == .reject || decision.warning != nil else { return nil }
+        level = decision.disposition == .reject ? .rejected : .warning
+        kind = decision.warning?.kind
+        algorithm = decision.warning.map { Self.displayAlgorithm($0.algorithm) }
+    }
+
+    var title: LocalizedStringKey {
+        switch level {
+        case .warning: "verification.policy.warning"
+        case .rejected: "verification.policy.rejected"
+        }
+    }
+
+    var systemImage: String {
+        switch level {
+        case .warning: "exclamationmark.triangle.fill"
+        case .rejected: "hand.raised.fill"
+        }
+    }
+
+    var color: Color {
+        switch level {
+        case .warning: .orange
+        case .rejected: .red
+        }
+    }
+
+    private static func displayAlgorithm(_ identifier: String) -> String {
+        switch identifier {
+        case "sha1": "SHA-1"
+        case "sha224": "SHA-224"
+        case "sha256": "SHA-256"
+        case "sha384": "SHA-384"
+        case "sha512": "SHA-512"
+        case "sha3-256": "SHA3-256"
+        case "sha3-512": "SHA3-512"
+        case "triple-des": "3DES"
+        case "cast5": "CAST5"
+        case "aes-128": "AES-128"
+        case "aes-192": "AES-192"
+        case "aes-256": "AES-256"
+        default: identifier.uppercased()
+        }
+    }
+}
+
+func messagePolicyPresentation(
+    for decisions: [LegacyPolicyDecisionFfi]
+) -> MessagePolicyPresentation? {
+    let presentations = decisions.compactMap(MessagePolicyPresentation.init)
+    return presentations.first(where: { $0.level == .rejected }) ?? presentations.first
+}
+
+extension VerificationOutcomeFfi {
+    var policyPresentation: MessagePolicyPresentation? {
+        messagePolicyPresentation(for: signatures.map(\.legacyDecision))
+    }
+}
+
+extension DecryptionReportFfi {
+    var policyPresentation: MessagePolicyPresentation? {
+        messagePolicyPresentation(for: [legacyDecision] + signatures.map(\.legacyDecision))
+    }
+}
+
+private struct LegacyPolicyNotice: View {
+    let presentation: MessagePolicyPresentation
+
+    var body: some View {
+        Label {
+            switch (presentation.level, presentation.kind) {
+            case (.warning, .weakSignatureHash):
+                Text("verification.policy.weakHashWarning \(presentation.algorithm ?? "unknown")")
+            case (.rejected, .weakSignatureHash):
+                Text("verification.policy.weakHashRejected \(presentation.algorithm ?? "unknown")")
+            case (.warning, .legacySymmetricCipher):
+                Text("verification.policy.legacyCipherWarning \(presentation.algorithm ?? "unknown")")
+            case (.rejected, .legacySymmetricCipher):
+                Text("verification.policy.legacyCipherRejected \(presentation.algorithm ?? "unknown")")
+            case (.rejected, nil):
+                Text("verification.policy.unrecognizedRejected")
+            case (.warning, nil):
+                Text("verification.policy.unrecognizedWarning")
+            }
+        } icon: {
+            Image(systemName: presentation.systemImage)
+        }
+        .font(.footnote)
+        .foregroundStyle(presentation.color)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("message.policy.notice")
     }
 }
 

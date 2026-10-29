@@ -51,6 +51,10 @@ pub enum MessageError {
     InvalidUtf8,
     #[error("unsupported hash algorithm ID {0}")]
     UnsupportedHashAlgorithm(u8),
+    #[error("unsupported symmetric algorithm ID {0}")]
+    UnsupportedSymmetricAlgorithm(u8),
+    #[error("encrypted data does not identify its symmetric algorithm")]
+    UnidentifiedSymmetricAlgorithm,
     #[error(transparent)]
     Key(#[from] KeyError),
     #[error(transparent)]

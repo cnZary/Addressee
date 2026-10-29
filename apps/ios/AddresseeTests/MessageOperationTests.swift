@@ -313,6 +313,65 @@ final class MessageOperationTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: signedOutput), payload)
     }
 
+    func testLegacyPolicyPresentationSeparatesWarningsRejectionsAndTrust() {
+        let warning = LegacyPolicyDecisionFfi(
+            disposition: .allowWithWarning,
+            warning: LegacyAlgorithmWarningFfi(kind: .weakSignatureHash, algorithm: "sha1")
+        )
+        let valid = VerificationOutcomeFfi(status: .valid, signatures: [makeVerification(decision: warning)])
+        XCTAssertEqual(
+            valid.policyPresentation,
+            MessagePolicyPresentation(level: .warning, kind: .weakSignatureHash, algorithm: "SHA-1")
+        )
+        XCTAssertEqual(valid.signatures[0].trust, .unknown)
+
+        let rejected = LegacyPolicyDecisionFfi(
+            disposition: .reject,
+            warning: LegacyAlgorithmWarningFfi(kind: .weakSignatureHash, algorithm: "md5")
+        )
+        let cipherWarning = LegacyPolicyDecisionFfi(
+            disposition: .allowWithWarning,
+            warning: LegacyAlgorithmWarningFfi(kind: .legacySymmetricCipher, algorithm: "cast5")
+        )
+        let report = DecryptionReportFfi(
+            status: .invalid,
+            signatures: [makeVerification(decision: rejected)],
+            trust: .unknown,
+            symmetricAlgorithm: "cast5",
+            legacyDecision: cipherWarning,
+            detail: nil,
+            mayCommitStaging: false
+        )
+        XCTAssertEqual(
+            report.policyPresentation,
+            MessagePolicyPresentation(level: .rejected, kind: .weakSignatureHash, algorithm: "MD5")
+        )
+        XCTAssertEqual(report.trust, .unknown)
+        XCTAssertFalse(report.mayCommitStaging)
+
+        let modern = VerificationOutcomeFfi(
+            status: .valid,
+            signatures: [makeVerification(decision: LegacyPolicyDecisionFfi(disposition: .allow, warning: nil))]
+        )
+        XCTAssertNil(modern.policyPresentation)
+    }
+
+    private func makeVerification(decision: LegacyPolicyDecisionFfi) -> SignatureVerificationFfi {
+        SignatureVerificationFfi(
+            status: decision.disposition == .reject ? .invalid : .valid,
+            cryptographicallyValid: true,
+            certificateFingerprint: nil,
+            signerFingerprint: nil,
+            signerKeyId: nil,
+            algorithm: nil,
+            hashAlgorithm: decision.warning?.algorithm,
+            legacyDecision: decision,
+            createdAt: nil,
+            keyValidity: nil,
+            trust: .unknown
+        )
+    }
+
     private static var password: String { "message-tests-only" }
 
     // Signing uses the wall clock at operation time while verification evaluates

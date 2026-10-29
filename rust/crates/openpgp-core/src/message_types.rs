@@ -1,4 +1,4 @@
-use openpgp_policy::HashAlgorithm;
+use openpgp_policy::{HashAlgorithm, LegacyDisposition, LegacyPolicyDecision, SymmetricAlgorithm};
 use serde::{Deserialize, Serialize};
 
 use crate::{AlgorithmMetadata, FullFingerprint, KeyValidity};
@@ -95,6 +95,7 @@ pub struct SignatureVerification {
     pub signer_key_id: Option<String>,
     pub algorithm: Option<AlgorithmMetadata>,
     pub hash_algorithm: Option<HashAlgorithm>,
+    pub legacy_decision: LegacyPolicyDecision,
     pub created_at: Option<u64>,
     pub key_validity: Option<KeyValidity>,
     pub trust: IdentityTrust,
@@ -131,17 +132,23 @@ pub struct DecryptionReport {
     pub status: DecryptionStatus,
     pub signatures: Vec<SignatureVerification>,
     pub trust: IdentityTrust,
+    pub symmetric_algorithm: Option<SymmetricAlgorithm>,
+    pub legacy_decision: LegacyPolicyDecision,
     pub detail: Option<String>,
 }
 
 impl DecryptionReport {
-    /// Checks decryption and message integrity, not signature trust. Invalid or unknown
-    /// signatures require an explicit warning and must not be presented as trusted identities.
-    pub const fn may_commit_staging(&self) -> bool {
+    /// Ordinary invalid or unknown signatures do not establish identity trust, but only a
+    /// legacy-policy rejection or failed decryption or integrity check blocks plaintext release.
+    pub fn may_commit_staging(&self) -> bool {
         !matches!(
             self.status,
             DecryptionStatus::DecryptionFailed | DecryptionStatus::IntegrityFailed
-        )
+        ) && self.legacy_decision.disposition != LegacyDisposition::Reject
+            && self
+                .signatures
+                .iter()
+                .all(|signature| signature.legacy_decision.disposition != LegacyDisposition::Reject)
     }
 }
 

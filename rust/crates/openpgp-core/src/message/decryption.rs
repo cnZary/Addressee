@@ -3,8 +3,11 @@ use std::{
     io::{self, BufReader, Read, Write},
 };
 
+use openpgp_policy::{LegacyDisposition, LegacyPolicyDecision};
 use pgp::{
-    composed::{DecryptionOptions, Esk, Message},
+    composed::{DecryptionOptions, Edata, Esk, Message, PlainSessionKey},
+    crypto::sym::SymmetricKeyAlgorithm,
+    packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
     types::{DecryptionKey as _, EskType, Password, PkeskVersion},
 };
 use zeroize::Zeroize as _;
@@ -15,7 +18,7 @@ use crate::{
 };
 
 use super::{
-    selection::DecryptionSelection,
+    selection::{DecryptionSelection, policy_symmetric_algorithm},
     verification::{decompress_message, verify_message},
 };
 
@@ -71,8 +74,9 @@ impl MessageService<'_> {
     ///
     /// The output may contain uncommitted plaintext before embedded-signature processing finishes.
     /// Callers must discard it unless `DecryptionReport::may_commit_staging()` returns true.
-    /// That check covers decryption and integrity, not signer trust. Invalid and unknown signers
-    /// must still be shown with their distinct warnings rather than treated as trusted identities.
+    /// That check covers decryption, integrity, and legacy-algorithm policy, not signer trust.
+    /// Ordinary invalid and unknown signers must still be shown with distinct warnings rather
+    /// than treated as trusted identities; a policy-rejected signature blocks plaintext release.
     /// SEIPDv1 uses rPGP's default check-first mode and its 1 GiB ciphertext buffer limit.
     pub fn decrypt_into<R: Read + std::fmt::Debug + Send, W: Write>(
         &self,
@@ -110,13 +114,31 @@ impl MessageService<'_> {
             Ok((message, _)) => message,
             Err(error) => return Ok(failure(DecryptionStatus::DecryptionFailed, error)),
         };
-        let mut message = match decrypt_message(encrypted, &mut candidates, &password) {
-            Ok(message) => message,
+        let (mut message, algorithm) = match decrypt_message(encrypted, &mut candidates, &password)
+        {
+            Ok(decrypted) => decrypted,
             Err(DecryptFailure::Pgp(error)) => {
                 return Ok(failure(status_for_pgp_error(&error), error));
             }
             Err(DecryptFailure::Message(error)) => return Err(error),
         };
+        let Some(symmetric_algorithm) = policy_symmetric_algorithm(algorithm) else {
+            let error = MessageError::UnsupportedSymmetricAlgorithm(u8::from(algorithm));
+            return Ok(failure(DecryptionStatus::DecryptionFailed, error));
+        };
+        let legacy_decision = self.security_policy.legacy_decryption(symmetric_algorithm);
+        if legacy_decision.disposition == LegacyDisposition::Reject {
+            return Ok(DecryptionReport {
+                status: DecryptionStatus::DecryptionFailed,
+                signatures: Vec::new(),
+                trust: IdentityTrust::Unknown,
+                symmetric_algorithm: Some(symmetric_algorithm),
+                legacy_decision,
+                detail: Some(format!(
+                    "Symmetric algorithm {symmetric_algorithm:?} is forbidden by the security policy; plaintext was not released"
+                )),
+            });
+        }
         message = match decompress_message(self, message) {
             Ok(message) => message,
             Err(MessageError::CompressionLimitExceeded { limit }) => {
@@ -152,6 +174,8 @@ impl MessageService<'_> {
             status,
             signatures: verification.signatures,
             trust: IdentityTrust::Unknown,
+            symmetric_algorithm: Some(symmetric_algorithm),
+            legacy_decision,
             detail: None,
         })
     }
@@ -161,7 +185,7 @@ fn decrypt_message<'a>(
     message: Message<'a>,
     candidates: &mut [DecryptionSelection<'_>],
     password: &Password,
-) -> Result<Message<'a>, DecryptFailure> {
+) -> Result<(Message<'a>, SymmetricKeyAlgorithm), DecryptFailure> {
     use super::selection::DecryptionKeySource;
 
     let Message::Encrypted {
@@ -203,12 +227,15 @@ fn decrypt_message<'a>(
             };
             match result {
                 Ok(Ok(session_key)) => {
+                    let algorithm = encrypted_data_algorithm(&edata, &session_key).ok_or(
+                        DecryptFailure::Message(MessageError::UnidentifiedSymmetricAlgorithm),
+                    )?;
                     // GnuPG AEAD is authenticated; unauthenticated legacy SED remains disabled.
                     edata.decrypt_with_options(
                         &session_key,
                         DecryptionOptions::new().enable_gnupg_aead(),
                     )?;
-                    return Ok(Message::from_bytes(edata)?);
+                    return Ok((Message::from_bytes(edata)?, algorithm));
                 }
                 Ok(Err(_)) | Err(_) if candidate.is_remote() => {
                     return Err(DecryptFailure::Message(candidate.remote_error()));
@@ -227,6 +254,27 @@ fn decrypt_message<'a>(
         }));
     }
     Err(pgp::errors::Error::MissingKey.into())
+}
+
+fn encrypted_data_algorithm(
+    edata: &Edata<'_>,
+    session_key: &PlainSessionKey,
+) -> Option<SymmetricKeyAlgorithm> {
+    session_key.sym_algorithm().or_else(|| {
+        let config = match edata {
+            Edata::SymEncryptedProtectedData { reader } | Edata::GnupgAeadData { reader } => {
+                reader.config()
+            }
+            Edata::SymEncryptedData { .. } => return None,
+        };
+        match config {
+            ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::V2 { sym_alg, .. }) => {
+                Some(*sym_alg)
+            }
+            ProtectedDataConfig::GnupgAead(config) => Some(config.sym_alg),
+            ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::V1) => None,
+        }
+    })
 }
 
 fn stage_plaintext<W: Write>(
@@ -259,6 +307,8 @@ fn failure(status: DecryptionStatus, error: impl std::fmt::Display) -> Decryptio
         status,
         signatures: Vec::new(),
         trust: IdentityTrust::Unknown,
+        symmetric_algorithm: None,
+        legacy_decision: LegacyPolicyDecision::default(),
         detail: Some(error.to_string()),
     }
 }

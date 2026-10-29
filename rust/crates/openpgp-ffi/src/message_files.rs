@@ -517,4 +517,121 @@ mod tests {
         assert!(!Path::new(&output).exists());
         assert_eq!(directory.entries(), 2);
     }
+
+    #[test]
+    fn legacy_hash_policy_is_preserved_and_rejected_file_plaintext_is_discarded() {
+        let engine = OpenPgpEngine::new();
+        let password = "legacy-file-test-only";
+        let signer = engine
+            .generate_key(
+                GenerationProfileFfi::Rsa2048V4,
+                "Legacy File Signer <legacy-files@example.invalid>".to_owned(),
+                password.to_owned(),
+                ExportPolicyFfi::Allowed,
+            )
+            .unwrap();
+        let fingerprint = signer.summary.fingerprint.clone();
+        let secret = engine
+            .export_private_key(fingerprint.clone(), crate::ExportFormatFfi::Binary)
+            .unwrap();
+        let public = signer.public_certificate;
+        let at = now();
+        let directory = TestDirectory::new();
+        let payload = b"legacy signed and encrypted file payload";
+
+        for (algorithm, identifier, may_commit) in [
+            (pgp::crypto::hash::HashAlgorithm::Md5, "md5", false),
+            (pgp::crypto::hash::HashAlgorithm::Sha1, "sha1", true),
+        ] {
+            let encrypted =
+                legacy_signed_encrypted(&secret, &public, password, algorithm, at, payload);
+            let decrypted = engine
+                .decrypt(
+                    fingerprint.clone(),
+                    password.to_owned(),
+                    at,
+                    encrypted.clone(),
+                )
+                .unwrap();
+            assert_eq!(decrypted.report.may_commit_staging, may_commit);
+            assert_eq!(decrypted.plaintext.is_some(), may_commit);
+            assert_eq!(
+                decrypted.report.signatures[0].hash_algorithm.as_deref(),
+                Some(identifier)
+            );
+            assert_eq!(
+                decrypted.report.signatures[0]
+                    .legacy_decision
+                    .warning
+                    .as_ref()
+                    .map(|warning| warning.algorithm.as_str()),
+                Some(identifier)
+            );
+
+            let input = directory.path(&format!("{identifier}.pgp"));
+            let output = directory.path(&format!("{identifier}.bin"));
+            fs::write(&input, encrypted).unwrap();
+            let report = engine
+                .decrypt_file(
+                    fingerprint.clone(),
+                    password.to_owned(),
+                    at,
+                    input,
+                    output.clone(),
+                )
+                .unwrap();
+            assert_eq!(report.may_commit_staging, may_commit);
+            assert_eq!(Path::new(&output).exists(), may_commit);
+            assert_eq!(directory.entries(), if may_commit { 3 } else { 1 });
+            if may_commit {
+                assert_eq!(fs::read(&output).unwrap(), payload);
+            }
+        }
+    }
+
+    fn legacy_signed_encrypted(
+        secret: &[u8],
+        public: &[u8],
+        password: &str,
+        algorithm: pgp::crypto::hash::HashAlgorithm,
+        at: u64,
+        payload: &[u8],
+    ) -> Vec<u8> {
+        use pgp::{
+            composed::{Deserializable as _, SubpacketConfig},
+            packet::{Subpacket, SubpacketData},
+            types::{KeyDetails as _, Timestamp},
+        };
+
+        let secret =
+            pgp::composed::SignedSecretKey::from_bytes(std::io::Cursor::new(secret)).unwrap();
+        let public =
+            pgp::composed::SignedPublicKey::from_bytes(std::io::Cursor::new(public)).unwrap();
+        let signing_key = &secret.secret_subkeys[0].key;
+        let hashed = vec![
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::from_secs(
+                at.try_into().unwrap(),
+            )))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(signing_key.fingerprint()))
+                .unwrap(),
+        ];
+        let unhashed = vec![
+            Subpacket::regular(SubpacketData::IssuerKeyId(signing_key.legacy_key_id())).unwrap(),
+        ];
+        let mut rng = rand::thread_rng();
+        let mut builder =
+            pgp::composed::MessageBuilder::from_bytes("payload.bin", payload.to_vec())
+                .seipd_v1(&mut rng, pgp::crypto::sym::SymmetricKeyAlgorithm::AES256);
+        builder
+            .encrypt_to_key(&mut rng, &public.public_subkeys[1])
+            .unwrap();
+        builder.sign_with_subpackets(
+            signing_key,
+            password.into(),
+            algorithm,
+            SubpacketConfig::UserDefined { hashed, unhashed },
+        );
+        builder.to_vec(&mut rng).unwrap()
+    }
 }

@@ -4,6 +4,10 @@ use openpgp_core::{
     MessageCipher, MessageFormat, SignatureMetadata, SignatureVerification, VerificationOutcome,
     VerificationStatus,
 };
+use openpgp_policy::{
+    HashAlgorithm, LegacyAlgorithmWarning, LegacyDisposition, LegacyPolicyDecision,
+    SymmetricAlgorithm,
+};
 
 use crate::{AlgorithmSummary, KeyUsageSummary};
 
@@ -96,7 +100,7 @@ impl From<SignatureMetadata> for SignatureMetadataFfi {
             certificate_fingerprint: value.certificate_fingerprint.to_string(),
             signer_fingerprint: value.signer_fingerprint.to_string(),
             algorithm: value.algorithm.into(),
-            hash_algorithm: format!("{:?}", value.hash_algorithm),
+            hash_algorithm: hash_algorithm_identifier(value.hash_algorithm).to_owned(),
             created_at: value.created_at,
         }
     }
@@ -124,6 +128,95 @@ impl From<VerificationStatus> for VerificationStatusFfi {
             VerificationStatus::Invalid => Self::Invalid,
             VerificationStatus::UnknownSigner => Self::UnknownSigner,
         }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum LegacyDispositionFfi {
+    Allow,
+    AllowWithWarning,
+    Reject,
+}
+
+impl From<LegacyDisposition> for LegacyDispositionFfi {
+    fn from(value: LegacyDisposition) -> Self {
+        match value {
+            LegacyDisposition::Allow => Self::Allow,
+            LegacyDisposition::AllowWithWarning => Self::AllowWithWarning,
+            LegacyDisposition::Reject => Self::Reject,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum LegacyWarningKindFfi {
+    WeakSignatureHash,
+    LegacySymmetricCipher,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct LegacyAlgorithmWarningFfi {
+    pub kind: LegacyWarningKindFfi,
+    pub algorithm: String,
+}
+
+impl From<LegacyAlgorithmWarning> for LegacyAlgorithmWarningFfi {
+    fn from(value: LegacyAlgorithmWarning) -> Self {
+        match value {
+            LegacyAlgorithmWarning::WeakSignatureHash(algorithm) => Self {
+                kind: LegacyWarningKindFfi::WeakSignatureHash,
+                algorithm: hash_algorithm_identifier(algorithm).to_owned(),
+            },
+            LegacyAlgorithmWarning::LegacySymmetricCipher(algorithm) => Self {
+                kind: LegacyWarningKindFfi::LegacySymmetricCipher,
+                algorithm: symmetric_algorithm_identifier(algorithm).to_owned(),
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct LegacyPolicyDecisionFfi {
+    pub disposition: LegacyDispositionFfi,
+    pub warning: Option<LegacyAlgorithmWarningFfi>,
+}
+
+impl From<LegacyPolicyDecision> for LegacyPolicyDecisionFfi {
+    fn from(value: LegacyPolicyDecision) -> Self {
+        Self {
+            disposition: value.disposition.into(),
+            warning: value.warning.map(Into::into),
+        }
+    }
+}
+
+fn hash_algorithm_identifier(algorithm: HashAlgorithm) -> &'static str {
+    match algorithm {
+        HashAlgorithm::Md5 => "md5",
+        HashAlgorithm::Sha1 => "sha1",
+        HashAlgorithm::Ripemd160 => "ripemd160",
+        HashAlgorithm::Sha224 => "sha224",
+        HashAlgorithm::Sha256 => "sha256",
+        HashAlgorithm::Sha384 => "sha384",
+        HashAlgorithm::Sha512 => "sha512",
+        HashAlgorithm::Sha3_256 => "sha3-256",
+        HashAlgorithm::Sha3_512 => "sha3-512",
+    }
+}
+
+fn symmetric_algorithm_identifier(algorithm: SymmetricAlgorithm) -> &'static str {
+    match algorithm {
+        SymmetricAlgorithm::Idea => "idea",
+        SymmetricAlgorithm::TripleDes => "triple-des",
+        SymmetricAlgorithm::Cast5 => "cast5",
+        SymmetricAlgorithm::Blowfish => "blowfish",
+        SymmetricAlgorithm::Aes128 => "aes-128",
+        SymmetricAlgorithm::Aes192 => "aes-192",
+        SymmetricAlgorithm::Aes256 => "aes-256",
+        SymmetricAlgorithm::Twofish => "twofish",
+        SymmetricAlgorithm::Camellia128 => "camellia-128",
+        SymmetricAlgorithm::Camellia192 => "camellia-192",
+        SymmetricAlgorithm::Camellia256 => "camellia-256",
     }
 }
 
@@ -174,6 +267,7 @@ pub struct SignatureVerificationFfi {
     pub signer_key_id: Option<String>,
     pub algorithm: Option<AlgorithmSummary>,
     pub hash_algorithm: Option<String>,
+    pub legacy_decision: LegacyPolicyDecisionFfi,
     pub created_at: Option<u64>,
     pub key_validity: Option<KeyValidityFfi>,
     pub trust: IdentityTrustFfi,
@@ -194,7 +288,8 @@ impl From<SignatureVerification> for SignatureVerificationFfi {
             algorithm: value.algorithm.map(Into::into),
             hash_algorithm: value
                 .hash_algorithm
-                .map(|algorithm| format!("{algorithm:?}")),
+                .map(|algorithm| hash_algorithm_identifier(algorithm).to_owned()),
+            legacy_decision: value.legacy_decision.into(),
             created_at: value.created_at,
             key_validity: value.key_validity.map(Into::into),
             trust: value.trust.into(),
@@ -266,6 +361,8 @@ pub struct DecryptionReportFfi {
     pub status: DecryptionStatusFfi,
     pub signatures: Vec<SignatureVerificationFfi>,
     pub trust: IdentityTrustFfi,
+    pub symmetric_algorithm: Option<String>,
+    pub legacy_decision: LegacyPolicyDecisionFfi,
     pub detail: Option<String>,
     pub may_commit_staging: bool,
 }
@@ -277,6 +374,10 @@ impl From<DecryptionReport> for DecryptionReportFfi {
             status: value.status.into(),
             signatures: value.signatures.into_iter().map(Into::into).collect(),
             trust: value.trust.into(),
+            symmetric_algorithm: value
+                .symmetric_algorithm
+                .map(|algorithm| symmetric_algorithm_identifier(algorithm).to_owned()),
+            legacy_decision: value.legacy_decision.into(),
             detail: value.detail,
         }
     }
@@ -332,4 +433,69 @@ pub struct SignEncryptTextRequestFfi {
     pub config: EncryptionConfigFfi,
     pub text: String,
     pub format: MessageFormatFfi,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_policy_mapping_preserves_structured_decisions_and_commit_rules() {
+        let signature = SignatureVerification {
+            status: VerificationStatus::Invalid,
+            cryptographically_valid: Some(true),
+            certificate_fingerprint: None,
+            signer_fingerprint: None,
+            signer_key_id: None,
+            algorithm: None,
+            hash_algorithm: Some(HashAlgorithm::Md5),
+            legacy_decision: LegacyPolicyDecision {
+                disposition: LegacyDisposition::Reject,
+                warning: Some(LegacyAlgorithmWarning::WeakSignatureHash(
+                    HashAlgorithm::Md5,
+                )),
+            },
+            created_at: None,
+            key_validity: None,
+            trust: IdentityTrust::Unknown,
+        };
+        let report = DecryptionReportFfi::from(DecryptionReport {
+            status: DecryptionStatus::Invalid,
+            signatures: vec![signature],
+            trust: IdentityTrust::Unknown,
+            symmetric_algorithm: Some(SymmetricAlgorithm::Cast5),
+            legacy_decision: LegacyPolicyDecision {
+                disposition: LegacyDisposition::AllowWithWarning,
+                warning: Some(LegacyAlgorithmWarning::LegacySymmetricCipher(
+                    SymmetricAlgorithm::Cast5,
+                )),
+            },
+            detail: None,
+        });
+        assert!(!report.may_commit_staging);
+        assert_eq!(report.symmetric_algorithm.as_deref(), Some("cast5"));
+        assert_eq!(
+            report.legacy_decision.disposition,
+            LegacyDispositionFfi::AllowWithWarning
+        );
+        assert_eq!(
+            report.legacy_decision.warning,
+            Some(LegacyAlgorithmWarningFfi {
+                kind: LegacyWarningKindFfi::LegacySymmetricCipher,
+                algorithm: "cast5".to_owned(),
+            })
+        );
+        assert_eq!(report.signatures[0].hash_algorithm.as_deref(), Some("md5"));
+        assert_eq!(
+            report.signatures[0].legacy_decision.disposition,
+            LegacyDispositionFfi::Reject
+        );
+        assert_eq!(
+            report.signatures[0].legacy_decision.warning,
+            Some(LegacyAlgorithmWarningFfi {
+                kind: LegacyWarningKindFfi::WeakSignatureHash,
+                algorithm: "md5".to_owned(),
+            })
+        );
+    }
 }

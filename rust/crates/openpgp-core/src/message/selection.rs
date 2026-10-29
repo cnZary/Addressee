@@ -1,9 +1,11 @@
 use std::cell::Cell;
 
-use openpgp_policy::HashAlgorithm as PolicyHashAlgorithm;
+use openpgp_policy::{
+    HashAlgorithm as PolicyHashAlgorithm, SymmetricAlgorithm as PolicySymmetricAlgorithm,
+};
 use pgp::{
     composed::{SignedPublicSubKey, SignedSecretSubKey},
-    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
     types::{
         DecryptionKey, Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PublicParams,
         SignatureBytes, SigningKey, Timestamp,
@@ -513,6 +515,25 @@ pub(crate) fn policy_hash_algorithm(algorithm: HashAlgorithm) -> Option<PolicyHa
         HashAlgorithm::Sha512 => Some(PolicyHashAlgorithm::Sha512),
         HashAlgorithm::Sha3_256 => Some(PolicyHashAlgorithm::Sha3_256),
         HashAlgorithm::Sha3_512 => Some(PolicyHashAlgorithm::Sha3_512),
+        _ => None,
+    }
+}
+
+pub(crate) fn policy_symmetric_algorithm(
+    algorithm: SymmetricKeyAlgorithm,
+) -> Option<PolicySymmetricAlgorithm> {
+    match algorithm {
+        SymmetricKeyAlgorithm::IDEA => Some(PolicySymmetricAlgorithm::Idea),
+        SymmetricKeyAlgorithm::TripleDES => Some(PolicySymmetricAlgorithm::TripleDes),
+        SymmetricKeyAlgorithm::CAST5 => Some(PolicySymmetricAlgorithm::Cast5),
+        SymmetricKeyAlgorithm::Blowfish => Some(PolicySymmetricAlgorithm::Blowfish),
+        SymmetricKeyAlgorithm::AES128 => Some(PolicySymmetricAlgorithm::Aes128),
+        SymmetricKeyAlgorithm::AES192 => Some(PolicySymmetricAlgorithm::Aes192),
+        SymmetricKeyAlgorithm::AES256 => Some(PolicySymmetricAlgorithm::Aes256),
+        SymmetricKeyAlgorithm::Twofish => Some(PolicySymmetricAlgorithm::Twofish),
+        SymmetricKeyAlgorithm::Camellia128 => Some(PolicySymmetricAlgorithm::Camellia128),
+        SymmetricKeyAlgorithm::Camellia192 => Some(PolicySymmetricAlgorithm::Camellia192),
+        SymmetricKeyAlgorithm::Camellia256 => Some(PolicySymmetricAlgorithm::Camellia256),
         _ => None,
     }
 }

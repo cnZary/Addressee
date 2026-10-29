@@ -72,6 +72,15 @@ pub struct LegacyPolicyDecision {
     pub warning: Option<LegacyAlgorithmWarning>,
 }
 
+impl Default for LegacyPolicyDecision {
+    fn default() -> Self {
+        Self {
+            disposition: LegacyDisposition::Allow,
+            warning: None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SecurityPolicy {

@@ -13,6 +13,10 @@ use pgp::{
     types::{KeyDetails as _, VerifyingKey},
 };
 
+use openpgp_policy::{
+    HashAlgorithm as PolicyHashAlgorithm, LegacyDisposition, LegacyPolicyDecision, SecurityPolicy,
+};
+
 use crate::{
     AlgorithmMetadata, CleartextVerification, FullFingerprint, IdentityTrust, KeyUsage,
     KeyValidity, MessageError, MessageService, SignatureVerification, VerificationOutcome,
@@ -38,7 +42,7 @@ impl MessageService<'_> {
         let Some(candidate) = candidates.first() else {
             return Ok(VerificationOutcome {
                 status: VerificationStatus::UnknownSigner,
-                signatures: vec![unknown_signer(&signature.signature)],
+                signatures: vec![unknown_signer(&self.security_policy, &signature.signature)],
             });
         };
         if candidates.len() != 1 {
@@ -47,6 +51,7 @@ impl MessageService<'_> {
         let cryptographically_valid =
             verify_signature(candidate, &signature.signature, data).is_ok();
         let verification = assess_signature(
+            &self.security_policy,
             &signature.signature,
             candidate,
             cryptographically_valid,
@@ -98,6 +103,7 @@ impl MessageService<'_> {
         for signature in cleartext.signatures() {
             let candidates = verification_candidates(self, signature, at_unix_seconds)?;
             verifications.push(verify_with_candidates(
+                &self.security_policy,
                 signature,
                 &candidates,
                 at_unix_seconds,
@@ -208,6 +214,7 @@ where
 }
 
 fn verify_with_candidates<F>(
+    policy: &SecurityPolicy,
     signature: &Signature,
     candidates: &[Candidate<'_>],
     at: u64,
@@ -220,22 +227,26 @@ where
     for candidate in candidates {
         let cryptographically_valid = verify(signature, candidate);
         if cryptographically_valid {
-            return assess_signature(signature, candidate, true, at);
+            return assess_signature(policy, signature, candidate, true, at);
         }
         if first_invalid.is_none() {
-            first_invalid = Some(assess_signature(signature, candidate, false, at));
+            first_invalid = Some(assess_signature(policy, signature, candidate, false, at));
         }
     }
-    first_invalid.unwrap_or_else(|| unknown_signer(signature))
+    first_invalid.unwrap_or_else(|| unknown_signer(policy, signature))
 }
 
 fn assess_signature(
+    policy: &SecurityPolicy,
     signature: &Signature,
     candidate: &Candidate<'_>,
     cryptographically_valid: bool,
     at: u64,
 ) -> SignatureVerification {
+    let hash_algorithm = signature.hash_alg().and_then(policy_hash_algorithm);
+    let legacy_decision = legacy_verification_decision(policy, hash_algorithm);
     let valid = cryptographically_valid
+        && legacy_decision.disposition != LegacyDisposition::Reject
         && signature_current(signature, at)
         && candidate.primary_valid
         && candidate.key_validity.is_valid_for(KeyUsage::Sign);
@@ -250,14 +261,16 @@ fn assess_signature(
         signer_fingerprint: Some(candidate.signer_fingerprint.clone()),
         signer_key_id: Some(candidate.signer_key_id.clone()),
         algorithm: Some(candidate.algorithm.clone()),
-        hash_algorithm: signature.hash_alg().and_then(policy_hash_algorithm),
+        hash_algorithm,
+        legacy_decision,
         created_at: signature_created(signature),
         key_validity: Some(candidate.key_validity.clone()),
         trust: IdentityTrust::Unknown,
     }
 }
 
-fn unknown_signer(signature: &Signature) -> SignatureVerification {
+fn unknown_signer(policy: &SecurityPolicy, signature: &Signature) -> SignatureVerification {
+    let hash_algorithm = signature.hash_alg().and_then(policy_hash_algorithm);
     SignatureVerification {
         status: VerificationStatus::UnknownSigner,
         cryptographically_valid: None,
@@ -271,11 +284,25 @@ fn unknown_signer(signature: &Signature) -> SignatureVerification {
             .first()
             .map(|key_id| uppercase_hex(key_id.as_ref())),
         algorithm: None,
-        hash_algorithm: signature.hash_alg().and_then(policy_hash_algorithm),
+        hash_algorithm,
+        legacy_decision: legacy_verification_decision(policy, hash_algorithm),
         created_at: signature_created(signature),
         key_validity: None,
         trust: IdentityTrust::Unknown,
     }
+}
+
+fn legacy_verification_decision(
+    policy: &SecurityPolicy,
+    algorithm: Option<PolicyHashAlgorithm>,
+) -> LegacyPolicyDecision {
+    algorithm.map_or(
+        LegacyPolicyDecision {
+            disposition: LegacyDisposition::Reject,
+            warning: None,
+        },
+        |algorithm| policy.legacy_verification(algorithm),
+    )
 }
 
 pub(crate) fn verify_message(
@@ -293,6 +320,7 @@ pub(crate) fn verify_message(
         };
         let candidates = verification_candidates(service, signature, at)?;
         verifications.push(verify_with_candidates(
+            &service.security_policy,
             signature,
             &candidates,
             at,
@@ -437,6 +465,7 @@ fn unknown_signature() -> SignatureVerification {
         signer_key_id: None,
         algorithm: None,
         hash_algorithm: None,
+        legacy_decision: LegacyPolicyDecision::default(),
         created_at: None,
         key_validity: None,
         trust: IdentityTrust::Unknown,

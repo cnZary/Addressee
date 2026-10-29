@@ -6307,6 +6307,134 @@
         }
       }
     },
+    "verification.policy.legacyCipherRejected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This message uses %@, which is forbidden by the security policy. Plaintext was not released."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此消息使用安全策略禁止的 %@ 加密，明文未释放。"
+          }
+        }
+      }
+    },
+    "verification.policy.legacyCipherWarning" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This message uses legacy %@ encryption. It was processed only for historical compatibility; use modern authenticated encryption for new messages."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此消息使用旧算法 %@ 加密，仅为兼容历史消息而处理；新消息应使用现代认证加密。"
+          }
+        }
+      }
+    },
+    "verification.policy.rejected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rejected by algorithm policy"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已被算法安全策略拒绝"
+          }
+        }
+      }
+    },
+    "verification.policy.unrecognizedRejected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An unrecognized algorithm was rejected by the security policy. Plaintext was not released."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安全策略拒绝了无法识别的算法，明文未释放。"
+          }
+        }
+      }
+    },
+    "verification.policy.unrecognizedWarning" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This message requires historical algorithm compatibility. This does not establish identity trust."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此消息需要旧算法兼容处理，这不代表身份可信。"
+          }
+        }
+      }
+    },
+    "verification.policy.warning" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Legacy algorithm warning"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧算法警告"
+          }
+        }
+      }
+    },
+    "verification.policy.weakHashRejected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This signature uses weak %@, which is forbidden by the security policy. Signed plaintext was not released."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此签名使用安全策略禁止的弱哈希 %@，签名明文未释放。"
+          }
+        }
+      }
+    },
+    "verification.policy.weakHashWarning" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This signature uses weak %@. It was processed only for historical compatibility and does not establish identity trust."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此签名使用弱哈希 %@，仅为兼容历史签名而处理，不代表身份可信。"
+          }
+        }
+      }
+    },
     "verification.result" : {
       "localizations" : {
         "en" : {
