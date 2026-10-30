@@ -6,7 +6,7 @@ use std::{
     io::Cursor,
 };
 
-use openpgp_policy::{GenerationProfile, SecurityPolicy};
+use openpgp_policy::{Backend, GenerationProfile, SecurityPolicy};
 use pgp::{
     composed::{
         Deserializable as _, DetachedSignature, MessageBuilder, PlainSessionKey, SignedSecretKey,
@@ -343,6 +343,107 @@ fn provider_failures_are_sanitized_and_not_validity_reports() {
     assert!(calls.iter().all(|(password_len, _)| *password_len == 0));
 }
 
+#[test]
+fn remote_backend_and_runtime_discovery_are_enforced_before_resolution() {
+    let mut fixture = Fixture::new(GenerationProfile::nist_p256_v4());
+    let fingerprint = &fixture.metadata.fingerprint;
+    let now = evaluation_time();
+
+    fixture.resolver.backend = None;
+    let service = MessageService::new(&fixture.public_store, SecurityPolicy::default())
+        .with_remote_resolver(&fixture.resolver);
+    assert!(matches!(
+        service.sign_detached(
+            fingerprint,
+            PASSWORD,
+            now,
+            &b"unknown backend"[..],
+            Vec::new(),
+            MessageFormat::Binary,
+        ),
+        Err(MessageError::UnregisteredCapability {
+            operation: openpgp_policy::Operation::Sign,
+        })
+    ));
+    assert!(fixture.resolver.signing_resolutions.borrow().is_empty());
+
+    fixture.resolver.backend = Some(Backend::OpenPgpCard);
+    let service = MessageService::new(&fixture.public_store, SecurityPolicy::default())
+        .with_remote_resolver(&fixture.resolver);
+    assert!(matches!(
+        service.sign_detached(
+            fingerprint,
+            PASSWORD,
+            now,
+            &b"undiscovered card"[..],
+            Vec::new(),
+            MessageFormat::Binary,
+        ),
+        Err(MessageError::CapabilityDisabled {
+            algorithm: openpgp_policy::Algorithm::NistP256Ecdsa,
+            backend: Backend::OpenPgpCard,
+            operation: openpgp_policy::Operation::Sign,
+            ..
+        })
+    ));
+    let mut encrypted = Vec::new();
+    service
+        .encrypt(
+            std::slice::from_ref(fingerprint),
+            now,
+            fixture.config,
+            &b"public encryption remains local"[..],
+            &mut encrypted,
+            MessageFormat::Binary,
+        )
+        .unwrap();
+    assert!(matches!(
+        service.decrypt(fingerprint, PASSWORD, now, Cursor::new(&encrypted)),
+        Err(MessageError::CapabilityDisabled {
+            algorithm: openpgp_policy::Algorithm::NistP256Ecdh,
+            backend: Backend::OpenPgpCard,
+            operation: openpgp_policy::Operation::Decrypt,
+            ..
+        })
+    ));
+    assert!(fixture.resolver.signing_resolutions.borrow().is_empty());
+    assert!(fixture.resolver.decryption_resolutions.borrow().is_empty());
+    assert!(fixture.resolver.signing.sign_calls.borrow().is_empty());
+    assert!(
+        fixture
+            .resolver
+            .decryption
+            .decrypt_calls
+            .borrow()
+            .is_empty()
+    );
+
+    fixture.resolver.runtime_capabilities_verified = true;
+    let service = MessageService::new(&fixture.public_store, SecurityPolicy::default())
+        .with_remote_resolver(&fixture.resolver);
+    service
+        .sign_detached(
+            fingerprint,
+            PASSWORD,
+            now,
+            &b"discovered card"[..],
+            Vec::new(),
+            MessageFormat::Binary,
+        )
+        .unwrap();
+    let decrypted = service
+        .decrypt(fingerprint, PASSWORD, now, Cursor::new(&encrypted))
+        .unwrap();
+    assert_eq!(
+        decrypted.plaintext.as_deref(),
+        Some(&b"public encryption remains local"[..])
+    );
+    assert_eq!(fixture.resolver.signing_resolutions.borrow().len(), 1);
+    assert_eq!(fixture.resolver.decryption_resolutions.borrow().len(), 1);
+    assert_eq!(fixture.resolver.signing.sign_calls.borrow().len(), 1);
+    assert_eq!(fixture.resolver.decryption.decrypt_calls.borrow().len(), 1);
+}
+
 fn exercise_remote_operations(profile: GenerationProfile) {
     let fixture = Fixture::new(profile);
     let fingerprint = &fixture.metadata.fingerprint;
@@ -583,6 +684,8 @@ struct TestResolver {
     decryption_fingerprint: FullFingerprint,
     signing: TestRemoteKey,
     decryption: TestRemoteKey,
+    backend: Option<Backend>,
+    runtime_capabilities_verified: bool,
     signing_resolutions: RefCell<Vec<(FullFingerprint, FullFingerprint)>>,
     decryption_resolutions: RefCell<Vec<(FullFingerprint, FullFingerprint)>>,
     fail_signing_resolution: Cell<bool>,
@@ -599,6 +702,8 @@ impl TestResolver {
             decryption_fingerprint: metadata.subkeys[1].fingerprint.clone(),
             signing: TestRemoteKey::new(component(secret, &metadata.subkeys[0].fingerprint)),
             decryption: TestRemoteKey::new(component(secret, &metadata.subkeys[1].fingerprint)),
+            backend: Some(Backend::Software),
+            runtime_capabilities_verified: false,
             signing_resolutions: RefCell::new(Vec::new()),
             decryption_resolutions: RefCell::new(Vec::new()),
             fail_signing_resolution: Cell::new(false),
@@ -610,6 +715,22 @@ impl TestResolver {
 }
 
 impl RemotePrivateKeyResolver for TestResolver {
+    fn backend(
+        &self,
+        _certificate_fingerprint: &FullFingerprint,
+        _component_fingerprint: &FullFingerprint,
+    ) -> Option<Backend> {
+        self.backend
+    }
+
+    fn runtime_capabilities_verified(
+        &self,
+        _certificate_fingerprint: &FullFingerprint,
+        _component_fingerprint: &FullFingerprint,
+    ) -> bool {
+        self.runtime_capabilities_verified
+    }
+
     fn signing_key(
         &self,
         certificate_fingerprint: &FullFingerprint,

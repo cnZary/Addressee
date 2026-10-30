@@ -596,6 +596,22 @@ impl TestResolver {
 }
 
 impl RemotePrivateKeyResolver for TestResolver {
+    fn backend(
+        &self,
+        _certificate: &FullFingerprint,
+        _component: &FullFingerprint,
+    ) -> Option<openpgp_policy::Backend> {
+        Some(openpgp_policy::Backend::OpenPgpCard)
+    }
+
+    fn runtime_capabilities_verified(
+        &self,
+        _certificate: &FullFingerprint,
+        _component: &FullFingerprint,
+    ) -> bool {
+        true
+    }
+
     fn signing_key(
         &self,
         certificate: &FullFingerprint,

@@ -6307,6 +6307,22 @@
         }
       }
     },
+    "verification.policy.capabilityRejected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verification with this key algorithm is disabled by the capability policy. The signature was not accepted and any signed plaintext was not released."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "能力策略禁止用此密钥算法验签。签名未被接受，任何签名明文均未释放。"
+          }
+        }
+      }
+    },
     "verification.policy.legacyCipherRejected" : {
       "localizations" : {
         "en" : {

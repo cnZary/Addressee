@@ -1,3 +1,4 @@
+use openpgp_policy::Backend;
 use pgp::types::{DecryptionKey, SigningKey};
 
 use crate::{FullFingerprint, MessageOperation};
@@ -18,9 +19,26 @@ pub enum RemoteKeyFailure {
 ///
 /// Resolver errors and remote callback errors are converted to sanitized message errors. Remote
 /// callbacks receive an empty OpenPGP password, never the software protection password.
-/// `failure_kind` reports only the public error category for the last failed operation on the
-/// requested component. It must not expose credentials or provider error details.
+/// `backend` identifies the actual private-key operation provider; an unknown backend fails closed.
+/// Card resolvers must additionally report whether the registered component completed runtime
+/// algorithm discovery and binding. `failure_kind` reports only the public error category for the
+/// last failed operation on the requested component. It must not expose credentials or provider
+/// error details.
 pub trait RemotePrivateKeyResolver {
+    fn backend(
+        &self,
+        certificate_fingerprint: &FullFingerprint,
+        component_fingerprint: &FullFingerprint,
+    ) -> Option<Backend>;
+
+    fn runtime_capabilities_verified(
+        &self,
+        _certificate_fingerprint: &FullFingerprint,
+        _component_fingerprint: &FullFingerprint,
+    ) -> bool {
+        false
+    }
+
     fn signing_key(
         &self,
         certificate_fingerprint: &FullFingerprint,

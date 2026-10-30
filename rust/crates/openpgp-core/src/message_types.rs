@@ -90,6 +90,7 @@ pub enum IdentityTrust {
 pub struct SignatureVerification {
     pub status: VerificationStatus,
     pub cryptographically_valid: Option<bool>,
+    pub capability_rejected: bool,
     pub certificate_fingerprint: Option<FullFingerprint>,
     pub signer_fingerprint: Option<FullFingerprint>,
     pub signer_key_id: Option<String>,
@@ -138,17 +139,18 @@ pub struct DecryptionReport {
 }
 
 impl DecryptionReport {
-    /// Ordinary invalid or unknown signatures do not establish identity trust, but only a
-    /// legacy-policy rejection or failed decryption or integrity check blocks plaintext release.
+    /// Ordinary invalid or unknown signatures do not establish identity trust, but a legacy or
+    /// capability-policy rejection prevents plaintext release just like failed decryption or
+    /// integrity verification.
     pub fn may_commit_staging(&self) -> bool {
         !matches!(
             self.status,
             DecryptionStatus::DecryptionFailed | DecryptionStatus::IntegrityFailed
         ) && self.legacy_decision.disposition != LegacyDisposition::Reject
-            && self
-                .signatures
-                .iter()
-                .all(|signature| signature.legacy_decision.disposition != LegacyDisposition::Reject)
+            && self.signatures.iter().all(|signature| {
+                signature.legacy_decision.disposition != LegacyDisposition::Reject
+                    && !signature.capability_rejected
+            })
     }
 }
 

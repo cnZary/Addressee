@@ -14,7 +14,8 @@ use pgp::{
 };
 
 use openpgp_policy::{
-    HashAlgorithm as PolicyHashAlgorithm, LegacyDisposition, LegacyPolicyDecision, SecurityPolicy,
+    Backend, HashAlgorithm as PolicyHashAlgorithm, LegacyDisposition, LegacyPolicyDecision,
+    Operation, SecurityPolicy,
 };
 
 use crate::{
@@ -23,7 +24,7 @@ use crate::{
     VerificationStatus,
 };
 
-use super::selection::policy_hash_algorithm;
+use super::selection::{KeyOperation, policy_hash_algorithm};
 
 impl MessageService<'_> {
     pub fn verify_detached<R: Read>(
@@ -48,8 +49,8 @@ impl MessageService<'_> {
         if candidates.len() != 1 {
             return Err(MessageError::AmbiguousSigner);
         }
-        let cryptographically_valid =
-            verify_signature(candidate, &signature.signature, data).is_ok();
+        let cryptographically_valid = (!candidate.capability_rejected)
+            .then(|| verify_signature(candidate, &signature.signature, data).is_ok());
         let verification = assess_signature(
             &self.security_policy,
             &signature.signature,
@@ -125,6 +126,7 @@ struct Candidate<'a> {
     algorithm: AlgorithmMetadata,
     key_validity: KeyValidity,
     primary_valid: bool,
+    capability_rejected: bool,
     key: CandidateKey<'a>,
 }
 
@@ -173,6 +175,10 @@ fn verification_candidates<'a>(
                 algorithm: certificate_metadata.primary.algorithm.clone(),
                 key_validity: validity.primary.clone(),
                 primary_valid: validity.primary.is_valid(),
+                capability_rejected: verification_capability_rejected(
+                    service,
+                    &certificate_metadata.primary,
+                ),
                 key: CandidateKey::Primary(&certificate.primary_key),
             });
         }
@@ -193,11 +199,25 @@ fn verification_candidates<'a>(
                 algorithm: key_metadata.algorithm.clone(),
                 key_validity: key_validity.clone(),
                 primary_valid: validity.primary.is_valid(),
+                capability_rejected: verification_capability_rejected(service, key_metadata),
                 key: CandidateKey::Subkey(subkey),
             });
         }
     }
     Ok(candidates)
+}
+
+fn verification_capability_rejected(
+    service: &MessageService<'_>,
+    key: &crate::KeyMetadata,
+) -> bool {
+    !KeyOperation::for_metadata(
+        &key.algorithm,
+        key.key_version,
+        Some(Backend::Software),
+        Operation::Verify,
+    )
+    .is_enabled(service, false)
 }
 
 fn issuer_matches<K>(signature: &Signature, key: &K) -> bool
@@ -225,12 +245,24 @@ where
 {
     let mut first_invalid = None;
     for candidate in candidates {
+        if candidate.capability_rejected {
+            if first_invalid.is_none() {
+                first_invalid = Some(assess_signature(policy, signature, candidate, None, at));
+            }
+            continue;
+        }
         let cryptographically_valid = verify(signature, candidate);
         if cryptographically_valid {
-            return assess_signature(policy, signature, candidate, true, at);
+            return assess_signature(policy, signature, candidate, Some(true), at);
         }
         if first_invalid.is_none() {
-            first_invalid = Some(assess_signature(policy, signature, candidate, false, at));
+            first_invalid = Some(assess_signature(
+                policy,
+                signature,
+                candidate,
+                Some(false),
+                at,
+            ));
         }
     }
     first_invalid.unwrap_or_else(|| unknown_signer(policy, signature))
@@ -240,12 +272,13 @@ fn assess_signature(
     policy: &SecurityPolicy,
     signature: &Signature,
     candidate: &Candidate<'_>,
-    cryptographically_valid: bool,
+    cryptographically_valid: Option<bool>,
     at: u64,
 ) -> SignatureVerification {
     let hash_algorithm = signature.hash_alg().and_then(policy_hash_algorithm);
     let legacy_decision = legacy_verification_decision(policy, hash_algorithm);
-    let valid = cryptographically_valid
+    let valid = cryptographically_valid == Some(true)
+        && !candidate.capability_rejected
         && legacy_decision.disposition != LegacyDisposition::Reject
         && signature_current(signature, at)
         && candidate.primary_valid
@@ -256,7 +289,8 @@ fn assess_signature(
         } else {
             VerificationStatus::Invalid
         },
-        cryptographically_valid: Some(cryptographically_valid),
+        cryptographically_valid,
+        capability_rejected: candidate.capability_rejected,
         certificate_fingerprint: Some(candidate.certificate_fingerprint.clone()),
         signer_fingerprint: Some(candidate.signer_fingerprint.clone()),
         signer_key_id: Some(candidate.signer_key_id.clone()),
@@ -274,6 +308,7 @@ fn unknown_signer(policy: &SecurityPolicy, signature: &Signature) -> SignatureVe
     SignatureVerification {
         status: VerificationStatus::UnknownSigner,
         cryptographically_valid: None,
+        capability_rejected: false,
         certificate_fingerprint: None,
         signer_fingerprint: signature
             .issuer_fingerprint()
@@ -460,6 +495,7 @@ fn unknown_signature() -> SignatureVerification {
     SignatureVerification {
         status: VerificationStatus::Invalid,
         cryptographically_valid: Some(false),
+        capability_rejected: false,
         certificate_fingerprint: None,
         signer_fingerprint: None,
         signer_key_id: None,

@@ -356,10 +356,29 @@ final class MessageOperationTests: XCTestCase {
         XCTAssertNil(modern.policyPresentation)
     }
 
-    private func makeVerification(decision: LegacyPolicyDecisionFfi) -> SignatureVerificationFfi {
+    func testCapabilityPolicyRejectionIsDistinctFromLegacyWarnings() {
+        let outcome = VerificationOutcomeFfi(
+            status: .invalid,
+            signatures: [
+                makeVerification(
+                    decision: LegacyPolicyDecisionFfi(disposition: .allow, warning: nil),
+                    capabilityRejected: true
+                )
+            ]
+        )
+        XCTAssertTrue(outcome.signatures[0].capabilityRejected)
+        XCTAssertNil(outcome.signatures[0].cryptographicallyValid)
+        XCTAssertNil(outcome.policyPresentation)
+    }
+
+    private func makeVerification(
+        decision: LegacyPolicyDecisionFfi,
+        capabilityRejected: Bool = false
+    ) -> SignatureVerificationFfi {
         SignatureVerificationFfi(
-            status: decision.disposition == .reject ? .invalid : .valid,
-            cryptographicallyValid: true,
+            status: decision.disposition == .reject || capabilityRejected ? .invalid : .valid,
+            cryptographicallyValid: capabilityRejected ? nil : true,
+            capabilityRejected: capabilityRejected,
             certificateFingerprint: nil,
             signerFingerprint: nil,
             signerKeyId: nil,

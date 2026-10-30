@@ -7,7 +7,7 @@ use crate::AddresseeError;
 
 static REGISTRY: OnceLock<CapabilityRegistry> = OnceLock::new();
 
-fn registry() -> &'static CapabilityRegistry {
+pub(crate) fn registry() -> &'static CapabilityRegistry {
     REGISTRY.get_or_init(CapabilityRegistry::baseline)
 }
 

@@ -354,6 +354,14 @@ mod tests {
     }
 
     impl RemotePrivateKeyResolver for SoftwareResolver {
+        fn backend(
+            &self,
+            _certificate: &FullFingerprint,
+            _component: &FullFingerprint,
+        ) -> Option<openpgp_core::Backend> {
+            Some(openpgp_core::Backend::Software)
+        }
+
         fn signing_key(
             &self,
             certificate: &FullFingerprint,

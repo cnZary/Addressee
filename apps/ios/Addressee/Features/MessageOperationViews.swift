@@ -358,6 +358,13 @@ private struct SignatureVerificationView: View {
                     Text("verification.notEvaluated")
                 }
             }
+            if signature.capabilityRejected {
+                Label("verification.policy.capabilityRejected", systemImage: "hand.raised.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("message.policy.notice")
+            }
             if let fingerprint = signature.signerFingerprint {
                 LabeledContent("verification.signerFingerprint", value: fingerprint)
                     .textSelection(.enabled)

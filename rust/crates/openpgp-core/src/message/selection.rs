@@ -1,7 +1,8 @@
 use std::cell::Cell;
 
 use openpgp_policy::{
-    HashAlgorithm as PolicyHashAlgorithm, SymmetricAlgorithm as PolicySymmetricAlgorithm,
+    Algorithm, Backend, HashAlgorithm as PolicyHashAlgorithm, KeyVersion as PolicyKeyVersion,
+    Operation, SymmetricAlgorithm as PolicySymmetricAlgorithm,
 };
 use pgp::{
     composed::{SignedPublicSubKey, SignedSecretSubKey},
@@ -16,6 +17,103 @@ use crate::{
     AlgorithmMetadata, CertificateValidity, FullFingerprint, KeyUsage, KeyValidity, MessageError,
     MessageOperation, MessageService, RemoteKeyFailure, RemotePrivateKeyResolver, metadata,
 };
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct KeyOperation {
+    algorithm: Option<Algorithm>,
+    backend: Option<Backend>,
+    key_version: Option<PolicyKeyVersion>,
+    operation: Operation,
+}
+
+impl KeyOperation {
+    fn for_key<K>(
+        key: &K,
+        backend: Option<Backend>,
+        operation: Operation,
+    ) -> Result<Self, MessageError>
+    where
+        K: KeyDetails + ?Sized,
+    {
+        let algorithm = metadata::algorithm_metadata(key.algorithm(), key.public_params())?;
+        Ok(Self::for_metadata(
+            &algorithm,
+            key.version().into(),
+            backend,
+            operation,
+        ))
+    }
+
+    pub(crate) fn for_metadata(
+        algorithm: &AlgorithmMetadata,
+        key_version: crate::KeyVersion,
+        backend: Option<Backend>,
+        operation: Operation,
+    ) -> Self {
+        let key_version = match key_version {
+            crate::KeyVersion::V4 => Some(PolicyKeyVersion::V4),
+            crate::KeyVersion::V6 => Some(PolicyKeyVersion::V6),
+            _ => None,
+        };
+        Self {
+            algorithm: algorithm.policy_algorithm,
+            backend,
+            key_version,
+            operation,
+        }
+    }
+
+    pub(crate) fn is_enabled(self, service: &MessageService<'_>, runtime_discovered: bool) -> bool {
+        let (Some(algorithm), Some(backend), Some(key_version)) =
+            (self.algorithm, self.backend, self.key_version)
+        else {
+            return false;
+        };
+        service
+            .capabilities
+            .is_operation_enabled_with_runtime_discovery(
+                algorithm,
+                backend,
+                key_version,
+                self.operation,
+                runtime_discovered,
+            )
+    }
+
+    fn validate(
+        self,
+        service: &MessageService<'_>,
+        runtime_discovered: bool,
+    ) -> Result<(), MessageError> {
+        if self.is_enabled(service, runtime_discovered) {
+            Ok(())
+        } else {
+            Err(self.error())
+        }
+    }
+
+    fn rejection(self, service: &MessageService<'_>, runtime_discovered: bool) -> Option<Self> {
+        self.validate(service, runtime_discovered)
+            .err()
+            .map(|_| self)
+    }
+
+    fn error(self) -> MessageError {
+        match (self.algorithm, self.backend, self.key_version) {
+            (Some(algorithm), Some(backend), Some(key_version)) => {
+                MessageError::CapabilityDisabled {
+                    algorithm,
+                    backend,
+                    key_version,
+                    operation: self.operation,
+                }
+            }
+            _ => MessageError::UnregisteredCapability {
+                operation: self.operation,
+            },
+        }
+    }
+}
 
 #[derive(Debug)]
 enum SigningPrivateKey<'a> {
@@ -161,10 +259,19 @@ pub(crate) struct DecryptionSelection<'a> {
     pub certificate_fingerprint: FullFingerprint,
     pub key: &'a SignedPublicSubKey,
     private: DecryptionPrivateKey<'a>,
+    policy_rejection: Option<KeyOperation>,
 }
 
 impl<'a> DecryptionSelection<'a> {
+    pub fn validate_capability(&self) -> Result<(), MessageError> {
+        match self.policy_rejection {
+            Some(rejection) => Err(rejection.error()),
+            None => Ok(()),
+        }
+    }
+
     pub fn resolve(&mut self) -> Result<Option<DecryptionKeySource<'a>>, MessageError> {
+        self.validate_capability()?;
         let certificate_fingerprint = self.certificate_fingerprint.clone();
         let component_fingerprint = FullFingerprint::from_rpgp(&self.key.fingerprint());
         match &mut self.private {
@@ -234,6 +341,7 @@ pub(crate) fn signing_key<'a>(
     let certificate = service.keys.rpgp_public_key(fingerprint)?;
     let validity = service.keys.evaluate_validity(fingerprint, at)?;
     let mut remote_candidates = Vec::new();
+    let mut policy_rejection = None;
     if validity.primary.is_valid() {
         for subkey in &certificate.public_subkeys {
             if !signing_valid(&validity, subkey) {
@@ -243,6 +351,12 @@ pub(crate) fn signing_key<'a>(
                 .keys
                 .rpgp_secret_subkey(fingerprint, &subkey.key.fingerprint())?
             {
+                let operation =
+                    KeyOperation::for_key(&subkey.key, Some(Backend::Software), Operation::Sign)?;
+                if let Some(rejection) = operation.rejection(service, false) {
+                    policy_rejection.get_or_insert(rejection);
+                    continue;
+                }
                 return signing_selection(service, fingerprint, subkey, secret);
             }
             remote_candidates.push(subkey);
@@ -251,6 +365,14 @@ pub(crate) fn signing_key<'a>(
         if let Some(resolver) = service.remote_resolver {
             for subkey in remote_candidates {
                 let component_fingerprint = FullFingerprint::from_rpgp(&subkey.key.fingerprint());
+                let backend = resolver.backend(fingerprint, &component_fingerprint);
+                let runtime_discovered =
+                    resolver.runtime_capabilities_verified(fingerprint, &component_fingerprint);
+                let operation = KeyOperation::for_key(&subkey.key, backend, Operation::Sign)?;
+                if let Some(rejection) = operation.rejection(service, runtime_discovered) {
+                    policy_rejection.get_or_insert(rejection);
+                    continue;
+                }
                 let Some(key) = resolver
                     .signing_key(fingerprint, &component_fingerprint)
                     .map_err(|_| {
@@ -287,6 +409,9 @@ pub(crate) fn signing_key<'a>(
             }
             .into());
         }
+    }
+    if let Some(rejection) = policy_rejection {
+        return Err(rejection.error());
     }
     Err(MessageError::NoUsableKey {
         fingerprint: fingerprint.clone(),
@@ -362,16 +487,27 @@ pub(crate) fn encryption_key<'a>(
 ) -> Result<EncryptionSelection<'a>, MessageError> {
     let certificate = service.keys.rpgp_public_key(fingerprint)?;
     let validity = service.keys.evaluate_validity(fingerprint, at)?;
+    let mut policy_rejection = None;
     if validity.primary.is_valid() {
         for subkey in &certificate.public_subkeys {
             let subkey_fingerprint = subkey.key.fingerprint();
             let Some(subkey_validity) = component_validity(&validity, &subkey_fingerprint) else {
                 continue;
             };
-            if encryption_valid(subkey_validity) && subkey.key.algorithm().can_encrypt() {
-                return Ok(EncryptionSelection { key: subkey });
+            if !encryption_valid(subkey_validity) || !subkey.key.algorithm().can_encrypt() {
+                continue;
             }
+            let operation =
+                KeyOperation::for_key(&subkey.key, Some(Backend::Software), Operation::Encrypt)?;
+            if let Some(rejection) = operation.rejection(service, false) {
+                policy_rejection.get_or_insert(rejection);
+                continue;
+            }
+            return Ok(EncryptionSelection { key: subkey });
         }
+    }
+    if let Some(rejection) = policy_rejection {
+        return Err(rejection.error());
     }
     Err(MessageError::NoUsableKey {
         fingerprint: fingerprint.clone(),
@@ -402,14 +538,26 @@ pub(crate) fn decryption_keys<'a>(
                 .keys
                 .rpgp_secret_subkey(fingerprint, &subkey_fingerprint)?
             {
+                let operation = KeyOperation::for_key(
+                    &subkey.key,
+                    Some(Backend::Software),
+                    Operation::Decrypt,
+                )?;
                 software.push(DecryptionSelection {
                     certificate_fingerprint: fingerprint.clone(),
                     key: subkey,
                     private: DecryptionPrivateKey::Software(secret),
+                    policy_rejection: operation.rejection(service, false),
                 });
             } else {
                 missing_private = true;
                 if let Some(resolver) = service.remote_resolver {
+                    let component_fingerprint = FullFingerprint::from_rpgp(&subkey_fingerprint);
+                    let backend = resolver.backend(fingerprint, &component_fingerprint);
+                    let runtime_discovered =
+                        resolver.runtime_capabilities_verified(fingerprint, &component_fingerprint);
+                    let operation =
+                        KeyOperation::for_key(&subkey.key, backend, Operation::Decrypt)?;
                     remote.push(DecryptionSelection {
                         certificate_fingerprint: fingerprint.clone(),
                         key: subkey,
@@ -417,6 +565,7 @@ pub(crate) fn decryption_keys<'a>(
                             resolver,
                             resolved: None,
                         }),
+                        policy_rejection: operation.rejection(service, runtime_discovered),
                     });
                 }
             }

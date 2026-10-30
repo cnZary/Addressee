@@ -298,7 +298,8 @@ impl OpenPgpEngine {
             .message_operations
             .lock()
             .map_err(|_| AddresseeError::InternalFailure)?;
-        let service = MessageService::new(&keys, SecurityPolicy::default());
+        let service = MessageService::new(&keys, SecurityPolicy::default())
+            .with_capability_registry(crate::policy::registry());
         let service = if providers.is_empty() {
             service
         } else {
@@ -329,7 +330,9 @@ impl From<MessageError> for AddresseeError {
             | MessageError::InvalidUtf8
             | MessageError::OpenPgp(_) => Self::InvalidInput,
             MessageError::NotEncrypted => Self::NotEncrypted,
-            MessageError::NoUsableKey { .. } => Self::UnsupportedOperation,
+            MessageError::NoUsableKey { .. }
+            | MessageError::CapabilityDisabled { .. }
+            | MessageError::UnregisteredCapability { .. } => Self::UnsupportedOperation,
             MessageError::RemoteKey {
                 failure: openpgp_core::RemoteKeyFailure::Cancelled,
                 ..

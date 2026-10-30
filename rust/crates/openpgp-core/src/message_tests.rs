@@ -3,8 +3,9 @@
 use std::io::Cursor;
 
 use openpgp_policy::{
-    Algorithm, GenerationProfile, HashAlgorithm, LegacyAlgorithmWarning, LegacyDisposition,
-    LegacyPolicyDecision, SecurityPolicy, SymmetricAlgorithm,
+    Algorithm, Backend, CapabilityRegistry, GenerationProfile, HashAlgorithm, ImplementationStatus,
+    KeyVersion, LegacyAlgorithmWarning, LegacyDisposition, LegacyPolicyDecision, Operation,
+    SecurityPolicy, SymmetricAlgorithm,
 };
 use pgp::{
     packet::{RevocationCode, SignatureConfig, SignatureType, Subpacket, SubpacketData},
@@ -805,6 +806,320 @@ fn message_limits_are_enforced() {
         limited.decrypt(&fingerprint, PASSWORD, now, Cursor::new(&encrypted)),
         Err(MessageError::PlaintextLimitExceeded { limit: 4 })
     ));
+}
+
+fn registry_without(algorithm: Algorithm, operation: Operation) -> CapabilityRegistry {
+    let mut registry = CapabilityRegistry::baseline();
+    let entry = registry
+        .entries
+        .iter_mut()
+        .find(|entry| {
+            entry.algorithm == algorithm
+                && entry.backend == Backend::Software
+                && entry.key_version == KeyVersion::V4
+        })
+        .unwrap();
+    entry
+        .evidence
+        .iter_mut()
+        .find(|evidence| evidence.operation == operation)
+        .unwrap()
+        .implementation = ImplementationStatus::NotImplemented;
+    assert!(!registry.is_operation_enabled(
+        algorithm,
+        Backend::Software,
+        KeyVersion::V4,
+        operation,
+    ));
+    registry
+}
+
+fn assert_capability_disabled<T>(
+    result: Result<T, MessageError>,
+    algorithm: Algorithm,
+    operation: Operation,
+) {
+    match result {
+        Err(MessageError::CapabilityDisabled {
+            algorithm: actual_algorithm,
+            backend: Backend::Software,
+            key_version: KeyVersion::V4,
+            operation: actual_operation,
+        }) => {
+            assert_eq!(actual_algorithm, algorithm);
+            assert_eq!(actual_operation, operation);
+        }
+        _ => panic!("operation was not rejected by the capability registry"),
+    }
+}
+
+#[test]
+fn capability_policy_blocks_new_operations_and_missing_registry_entries() {
+    let profile = GenerationProfile::nist_p256_v4();
+    let (store, generated) = generate(profile.clone());
+    let fingerprint = generated.metadata.fingerprint;
+    let at = evaluation_time();
+    let payload = b"capability policy payload";
+    let config = profile_encryption(&profile);
+
+    let registry = registry_without(Algorithm::NistP256Ecdsa, Operation::Sign);
+    let service =
+        MessageService::new(&store, SecurityPolicy::default()).with_capability_registry(&registry);
+    let mut output = Vec::new();
+    assert_capability_disabled(
+        service.sign_detached(
+            &fingerprint,
+            PASSWORD,
+            at,
+            &payload[..],
+            &mut output,
+            MessageFormat::Binary,
+        ),
+        Algorithm::NistP256Ecdsa,
+        Operation::Sign,
+    );
+    assert!(output.is_empty());
+    assert_capability_disabled(
+        service.sign_attached(
+            &fingerprint,
+            PASSWORD,
+            at,
+            &payload[..],
+            Vec::new(),
+            MessageFormat::Binary,
+        ),
+        Algorithm::NistP256Ecdsa,
+        Operation::Sign,
+    );
+    assert_capability_disabled(
+        service.sign_cleartext(
+            &fingerprint,
+            PASSWORD,
+            at,
+            "Capability policy\r\n",
+            Vec::new(),
+        ),
+        Algorithm::NistP256Ecdsa,
+        Operation::Sign,
+    );
+    assert_capability_disabled(
+        service.sign_and_encrypt(
+            crate::SigningKeyRequest::new(&fingerprint, PASSWORD),
+            crate::EncryptionRequest::new(std::slice::from_ref(&fingerprint), at, config),
+            &payload[..],
+            Vec::new(),
+            MessageFormat::Binary,
+        ),
+        Algorithm::NistP256Ecdsa,
+        Operation::Sign,
+    );
+
+    let registry = registry_without(Algorithm::NistP256Ecdh, Operation::Encrypt);
+    let service =
+        MessageService::new(&store, SecurityPolicy::default()).with_capability_registry(&registry);
+    let mut output = Vec::new();
+    assert_capability_disabled(
+        service.encrypt(
+            std::slice::from_ref(&fingerprint),
+            at,
+            config,
+            &payload[..],
+            &mut output,
+            MessageFormat::Binary,
+        ),
+        Algorithm::NistP256Ecdh,
+        Operation::Encrypt,
+    );
+    assert!(output.is_empty());
+    assert_capability_disabled(
+        service.encrypt_text(
+            std::slice::from_ref(&fingerprint),
+            at,
+            config,
+            "Capability policy\r\n",
+            Vec::new(),
+            MessageFormat::Binary,
+        ),
+        Algorithm::NistP256Ecdh,
+        Operation::Encrypt,
+    );
+    assert_capability_disabled(
+        service.sign_and_encrypt(
+            crate::SigningKeyRequest::new(&fingerprint, PASSWORD),
+            crate::EncryptionRequest::new(std::slice::from_ref(&fingerprint), at, config),
+            &payload[..],
+            Vec::new(),
+            MessageFormat::Binary,
+        ),
+        Algorithm::NistP256Ecdh,
+        Operation::Encrypt,
+    );
+
+    let normal = MessageService::new(&store, SecurityPolicy::default());
+    let mut encrypted = Vec::new();
+    normal
+        .encrypt(
+            std::slice::from_ref(&fingerprint),
+            at,
+            config,
+            &payload[..],
+            &mut encrypted,
+            MessageFormat::Binary,
+        )
+        .unwrap();
+    let registry = registry_without(Algorithm::NistP256Ecdh, Operation::Decrypt);
+    let service =
+        MessageService::new(&store, SecurityPolicy::default()).with_capability_registry(&registry);
+    assert_capability_disabled(
+        service.decrypt(&fingerprint, PASSWORD, at, Cursor::new(&encrypted)),
+        Algorithm::NistP256Ecdh,
+        Operation::Decrypt,
+    );
+    let mut staging = Vec::new();
+    assert_capability_disabled(
+        service.decrypt_into(
+            &fingerprint,
+            PASSWORD,
+            at,
+            Cursor::new(&encrypted),
+            &mut staging,
+        ),
+        Algorithm::NistP256Ecdh,
+        Operation::Decrypt,
+    );
+    assert!(staging.is_empty());
+
+    let mut registry = CapabilityRegistry::baseline();
+    registry.entries.retain(|entry| {
+        !(entry.algorithm == Algorithm::NistP256Ecdsa
+            && entry.backend == Backend::Software
+            && entry.key_version == KeyVersion::V4)
+    });
+    let service =
+        MessageService::new(&store, SecurityPolicy::default()).with_capability_registry(&registry);
+    assert_capability_disabled(
+        service.sign_detached(
+            &fingerprint,
+            PASSWORD,
+            at,
+            &payload[..],
+            Vec::new(),
+            MessageFormat::Binary,
+        ),
+        Algorithm::NistP256Ecdsa,
+        Operation::Sign,
+    );
+}
+
+#[test]
+fn capability_policy_rejects_verification_without_releasing_plaintext() {
+    let profile = GenerationProfile::nist_p256_v4();
+    let (store, generated) = generate(profile.clone());
+    let fingerprint = generated.metadata.fingerprint;
+    let at = evaluation_time();
+    let payload = b"capability verification payload";
+    let text = "Capability verification\r\n";
+    let config = profile_encryption(&profile);
+    let normal = MessageService::new(&store, SecurityPolicy::default());
+
+    let mut detached = Vec::new();
+    normal
+        .sign_detached(
+            &fingerprint,
+            PASSWORD,
+            at,
+            &payload[..],
+            &mut detached,
+            MessageFormat::Binary,
+        )
+        .unwrap();
+    let mut attached = Vec::new();
+    normal
+        .sign_attached(
+            &fingerprint,
+            PASSWORD,
+            at,
+            &payload[..],
+            &mut attached,
+            MessageFormat::Binary,
+        )
+        .unwrap();
+    let mut cleartext = Vec::new();
+    normal
+        .sign_cleartext(&fingerprint, PASSWORD, at, text, &mut cleartext)
+        .unwrap();
+    let mut encrypted = Vec::new();
+    normal
+        .encrypt(
+            std::slice::from_ref(&fingerprint),
+            at,
+            config,
+            &payload[..],
+            &mut encrypted,
+            MessageFormat::Binary,
+        )
+        .unwrap();
+    let mut signed_encrypted = Vec::new();
+    normal
+        .sign_and_encrypt(
+            crate::SigningKeyRequest::new(&fingerprint, PASSWORD),
+            crate::EncryptionRequest::new(std::slice::from_ref(&fingerprint), at, config),
+            &payload[..],
+            &mut signed_encrypted,
+            MessageFormat::Binary,
+        )
+        .unwrap();
+
+    let registry = registry_without(Algorithm::NistP256Ecdsa, Operation::Verify);
+    let service =
+        MessageService::new(&store, SecurityPolicy::default()).with_capability_registry(&registry);
+    let verified = service
+        .verify_detached(&payload[..], &detached, at)
+        .unwrap();
+    assert_eq!(verified.status, VerificationStatus::Invalid);
+    assert!(verified.signatures[0].capability_rejected);
+    assert_eq!(verified.signatures[0].cryptographically_valid, None);
+
+    let mut plaintext = Vec::new();
+    let verified = service
+        .verify_attached(Cursor::new(&attached), &mut plaintext, at)
+        .unwrap();
+    assert_eq!(verified.status, VerificationStatus::Invalid);
+    assert!(verified.signatures[0].capability_rejected);
+    assert!(plaintext.is_empty());
+
+    let verified = service.verify_cleartext(&cleartext, at).unwrap();
+    assert_eq!(verified.outcome.status, VerificationStatus::Invalid);
+    assert!(verified.outcome.signatures[0].capability_rejected);
+    assert_eq!(verified.text, None);
+
+    let decrypted = service
+        .decrypt(&fingerprint, PASSWORD, at, Cursor::new(&signed_encrypted))
+        .unwrap();
+    assert_eq!(decrypted.report.status, DecryptionStatus::Invalid);
+    assert!(decrypted.report.signatures[0].capability_rejected);
+    assert_eq!(decrypted.report.signatures[0].cryptographically_valid, None);
+    assert_eq!(decrypted.plaintext, None);
+    assert!(!decrypted.report.may_commit_staging());
+
+    let mut staging = Vec::new();
+    let report = service
+        .decrypt_into(
+            &fingerprint,
+            PASSWORD,
+            at,
+            Cursor::new(&signed_encrypted),
+            &mut staging,
+        )
+        .unwrap();
+    assert!(!report.may_commit_staging());
+
+    let unsigned = service
+        .decrypt(&fingerprint, PASSWORD, at, Cursor::new(&encrypted))
+        .unwrap();
+    assert_eq!(unsigned.report.status, DecryptionStatus::Unsigned);
+    assert_eq!(unsigned.plaintext.as_deref(), Some(&payload[..]));
+    assert!(unsigned.report.may_commit_staging());
 }
 
 #[test]

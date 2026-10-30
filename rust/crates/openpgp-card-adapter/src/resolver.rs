@@ -1,5 +1,5 @@
 use openpgp_card::ocard::KeyType;
-use openpgp_core::{FullFingerprint, RemotePrivateKeyResolver};
+use openpgp_core::{Backend, FullFingerprint, RemotePrivateKeyResolver};
 use pgp::{
     composed::SignedPublicKey,
     types::{DecryptionKey, Fingerprint, KeyDetails as _, SigningKey},
@@ -104,6 +104,24 @@ impl CardKeyResolver {
 }
 
 impl RemotePrivateKeyResolver for CardKeyResolver {
+    fn backend(
+        &self,
+        certificate_fingerprint: &FullFingerprint,
+        component_fingerprint: &FullFingerprint,
+    ) -> Option<Backend> {
+        self.find(certificate_fingerprint, component_fingerprint)
+            .map(|_| Backend::OpenPgpCard)
+    }
+
+    fn runtime_capabilities_verified(
+        &self,
+        certificate_fingerprint: &FullFingerprint,
+        component_fingerprint: &FullFingerprint,
+    ) -> bool {
+        self.find(certificate_fingerprint, component_fingerprint)
+            .is_some()
+    }
+
     fn signing_key(
         &self,
         certificate_fingerprint: &FullFingerprint,

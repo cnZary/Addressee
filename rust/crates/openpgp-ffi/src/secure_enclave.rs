@@ -160,6 +160,17 @@ impl SecureEnclaveResolver {
 }
 
 impl RemotePrivateKeyResolver for SecureEnclaveResolver {
+    fn backend(
+        &self,
+        certificate: &FullFingerprint,
+        component: &FullFingerprint,
+    ) -> Option<openpgp_policy::Backend> {
+        (certificate == self.binding()
+            && (component == &self.signing_fingerprint
+                || component == &self.encryption_fingerprint))
+            .then_some(openpgp_policy::Backend::SecureEnclave)
+    }
+
     fn signing_key(
         &self,
         certificate: &FullFingerprint,

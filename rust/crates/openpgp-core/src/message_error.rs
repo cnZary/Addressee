@@ -1,4 +1,4 @@
-use openpgp_policy::SecurityPolicyError;
+use openpgp_policy::{Algorithm, Backend, KeyVersion, Operation, SecurityPolicyError};
 use thiserror::Error;
 
 use crate::{FullFingerprint, KeyError, MessageOperation, RemoteKeyFailure};
@@ -22,6 +22,17 @@ pub enum MessageError {
         fingerprint: FullFingerprint,
         operation: MessageOperation,
     },
+    #[error("{operation:?} is disabled for {algorithm:?} {key_version:?} keys on {backend:?}")]
+    CapabilityDisabled {
+        algorithm: Algorithm,
+        backend: Backend,
+        key_version: KeyVersion,
+        operation: Operation,
+    },
+    #[error(
+        "{operation:?} is disabled because the key algorithm, version, or backend is unregistered"
+    )]
+    UnregisteredCapability { operation: Operation },
     #[error(
         "remote private-key operation {operation:?} failed for component {component_fingerprint} in certificate {fingerprint}"
     )]

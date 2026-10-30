@@ -10,10 +10,12 @@ use std::{
 };
 
 use openpgp_core::{
-    AeadMode, EncryptionConfig, ExportFormat, MessageCipher, MessageFormat, MessageService,
-    PrivateExportPolicy, SoftwareKeyStore,
+    AeadMode, EncryptionConfig, ExportFormat, MessageCipher, MessageError, MessageFormat,
+    MessageService, PrivateExportPolicy, SoftwareKeyStore, VerificationStatus,
 };
-use openpgp_policy::{Algorithm, CompatibilityAcknowledgement, GenerationProfile, SecurityPolicy};
+use openpgp_policy::{
+    Algorithm, CompatibilityAcknowledgement, GenerationProfile, Operation, SecurityPolicy,
+};
 use pgp::types::Timestamp;
 
 const PASSWORD: &str = "old correct horse battery staple";
@@ -65,6 +67,175 @@ fn legacy_curve25519_bidirectional() -> TestResult {
             .unwrap(),
     )?;
     gpg_to_application(GpgProfile::LegacyCurve25519)
+}
+
+#[test]
+fn imported_dsa_and_elgamal_operations_fail_closed() -> TestResult {
+    let home = GpgHome::new()?;
+    let user_id = "Legacy Policy <legacy@example.test>";
+    home.success(
+        &[
+            "--passphrase",
+            "",
+            "--quick-generate-key",
+            user_id,
+            "rsa2048",
+            "cert",
+            "never",
+        ],
+        None,
+    )?;
+    let listing = home.success(&["--with-colons", "--list-secret-keys", user_id], None)?;
+    let fingerprint = String::from_utf8_lossy(&listing.stdout)
+        .lines()
+        .find(|line| line.starts_with("fpr:"))
+        .and_then(|line| line.split(':').nth(9))
+        .filter(|fingerprint| fingerprint.len() == 40)
+        .ok_or_else(|| "GnuPG did not return the legacy test fingerprint".to_owned())?
+        .to_owned();
+    for (algorithm, usage) in [("dsa2048", "sign"), ("elg2048", "encrypt")] {
+        home.success(
+            &[
+                "--passphrase",
+                "",
+                "--quick-add-key",
+                &fingerprint,
+                algorithm,
+                usage,
+                "never",
+            ],
+            None,
+        )?;
+    }
+    let private_path = home.path.join("legacy-private.asc");
+    home.success(
+        &[
+            "--output",
+            path_str(&private_path)?,
+            "--armor",
+            "--export-secret-keys",
+            user_id,
+        ],
+        None,
+    )?;
+    let private = fs::read(&private_path).map_err(|error| error.to_string())?;
+    let mut store = SoftwareKeyStore::new();
+    let imported = store
+        .import_private(&private, None, NEW_PASSWORD, PrivateExportPolicy::Allowed)
+        .map_err(|error| format!("legacy private-key import failed: {error}"))?;
+    for algorithm in [Algorithm::Dsa, Algorithm::ElGamal] {
+        if !imported
+            .metadata
+            .subkeys
+            .iter()
+            .any(|key| key.algorithm.policy_algorithm == Some(algorithm))
+        {
+            return Err(format!("imported certificate is missing {algorithm:?}"));
+        }
+    }
+    let fingerprint = imported.metadata.fingerprint;
+    let service = MessageService::new(&store, SecurityPolicy::default());
+    let now = evaluation_time();
+    let payload = b"legacy algorithm policy payload\r\n";
+    match service.sign_detached(
+        &fingerprint,
+        NEW_PASSWORD,
+        now,
+        &payload[..],
+        Vec::new(),
+        MessageFormat::Binary,
+    ) {
+        Err(MessageError::CapabilityDisabled {
+            algorithm: Algorithm::Dsa,
+            operation: Operation::Sign,
+            ..
+        }) => {}
+        other => return Err(format!("DSA signing was not policy-rejected: {other:?}")),
+    }
+
+    let data_path = home.write("legacy-payload.bin", payload)?;
+    let detached_path = home.path.join("legacy-detached.sig");
+    home.success(
+        &[
+            "--local-user",
+            fingerprint.as_str(),
+            "--detach-sign",
+            "--output",
+            path_str(&detached_path)?,
+            path_str(&data_path)?,
+        ],
+        None,
+    )?;
+    let detached = fs::read(&detached_path).map_err(|error| error.to_string())?;
+    let verified = service
+        .verify_detached(&payload[..], &detached, now)
+        .map_err(|error| format!("legacy detached verification failed: {error}"))?;
+    if verified.status != VerificationStatus::Invalid
+        || verified.signatures.len() != 1
+        || !verified.signatures[0].capability_rejected
+        || verified.signatures[0].cryptographically_valid.is_some()
+    {
+        return Err(format!(
+            "DSA verification did not fail closed before cryptographic evaluation: {verified:?}"
+        ));
+    }
+
+    let mut encrypted = Vec::new();
+    match service.encrypt(
+        std::slice::from_ref(&fingerprint),
+        now,
+        EncryptionConfig::SeipdV1 {
+            cipher: MessageCipher::Aes256,
+        },
+        &payload[..],
+        &mut encrypted,
+        MessageFormat::Binary,
+    ) {
+        Err(MessageError::CapabilityDisabled {
+            algorithm: Algorithm::ElGamal,
+            operation: Operation::Encrypt,
+            ..
+        }) => {}
+        other => {
+            return Err(format!(
+                "ElGamal encryption was not policy-rejected: {other:?}"
+            ));
+        }
+    }
+    if !encrypted.is_empty() {
+        return Err("policy-rejected ElGamal encryption produced an artifact".into());
+    }
+
+    let encrypted_path = home.path.join("legacy-encrypted.pgp");
+    home.success(
+        &[
+            "--trust-model",
+            "always",
+            "--encrypt",
+            "--recipient",
+            fingerprint.as_str(),
+            "--output",
+            path_str(&encrypted_path)?,
+            path_str(&data_path)?,
+        ],
+        None,
+    )?;
+    let encrypted = fs::read(&encrypted_path).map_err(|error| error.to_string())?;
+    match service.decrypt(
+        &fingerprint,
+        NEW_PASSWORD,
+        now,
+        std::io::Cursor::new(&encrypted),
+    ) {
+        Err(MessageError::CapabilityDisabled {
+            algorithm: Algorithm::ElGamal,
+            operation: Operation::Decrypt,
+            ..
+        }) => Ok(()),
+        other => Err(format!(
+            "ElGamal decryption was not policy-rejected: {other:?}"
+        )),
+    }
 }
 
 #[ignore = "GnuPG 2.5.24 rejects native v6 Ed25519 with public-key algorithm 27 during public import"]

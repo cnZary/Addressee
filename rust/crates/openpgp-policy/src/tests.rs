@@ -412,6 +412,45 @@ fn failed_or_not_applicable_tests_and_false_claims_never_enable_operations() {
 }
 
 #[test]
+fn card_operations_require_runtime_discovery_without_relaxing_other_evidence() {
+    let registry = CapabilityRegistry::baseline();
+    let p256_sign = (
+        Algorithm::NistP256Ecdsa,
+        Backend::OpenPgpCard,
+        KeyVersion::V4,
+        Operation::Sign,
+    );
+    assert!(!registry.is_operation_enabled(p256_sign.0, p256_sign.1, p256_sign.2, p256_sign.3));
+    assert!(
+        registry.is_operation_enabled_with_runtime_discovery(
+            p256_sign.0,
+            p256_sign.1,
+            p256_sign.2,
+            p256_sign.3,
+            true,
+        ),
+        "{:?}",
+        registry.entry(p256_sign.0, p256_sign.1, p256_sign.2),
+    );
+    assert!(!registry.is_fully_supported(p256_sign.0, p256_sign.1, p256_sign.2, p256_sign.3,));
+
+    for (algorithm, operation) in [
+        (Algorithm::NistP256Ecdsa, Operation::Verify),
+        (Algorithm::NistP384Ecdsa, Operation::Sign),
+        (Algorithm::NistP256Ecdh, Operation::Sign),
+        (Algorithm::Dsa, Operation::Sign),
+    ] {
+        assert!(!registry.is_operation_enabled_with_runtime_discovery(
+            algorithm,
+            Backend::OpenPgpCard,
+            KeyVersion::V4,
+            operation,
+            true,
+        ));
+    }
+}
+
+#[test]
 fn hardware_requires_physical_and_independent_evidence_for_full_support() {
     let registry = CapabilityRegistry::baseline();
     let mut entry = registry

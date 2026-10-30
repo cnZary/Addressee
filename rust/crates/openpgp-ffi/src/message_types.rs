@@ -262,6 +262,7 @@ impl From<KeyValidity> for KeyValidityFfi {
 pub struct SignatureVerificationFfi {
     pub status: VerificationStatusFfi,
     pub cryptographically_valid: Option<bool>,
+    pub capability_rejected: bool,
     pub certificate_fingerprint: Option<String>,
     pub signer_fingerprint: Option<String>,
     pub signer_key_id: Option<String>,
@@ -278,6 +279,7 @@ impl From<SignatureVerification> for SignatureVerificationFfi {
         Self {
             status: value.status.into(),
             cryptographically_valid: value.cryptographically_valid,
+            capability_rejected: value.capability_rejected,
             certificate_fingerprint: value
                 .certificate_fingerprint
                 .map(|fingerprint| fingerprint.to_string()),
@@ -444,6 +446,7 @@ mod tests {
         let signature = SignatureVerification {
             status: VerificationStatus::Invalid,
             cryptographically_valid: Some(true),
+            capability_rejected: false,
             certificate_fingerprint: None,
             signer_fingerprint: None,
             signer_key_id: None,

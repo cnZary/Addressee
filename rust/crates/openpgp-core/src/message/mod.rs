@@ -5,9 +5,10 @@ mod verification;
 use std::{
     collections::BTreeSet,
     io::{Read, Write},
+    sync::OnceLock,
 };
 
-use openpgp_policy::{SecurityPolicy, SymmetricAlgorithm};
+use openpgp_policy::{CapabilityRegistry, SecurityPolicy, SymmetricAlgorithm};
 use pgp::{
     composed::{
         ArmorOptions, CleartextSignedMessage, DetachedSignature, Encryption, MessageBuilder,
@@ -30,9 +31,15 @@ use crate::{
 
 use self::selection::SigningSelection;
 
+fn default_capability_registry() -> &'static CapabilityRegistry {
+    static REGISTRY: OnceLock<CapabilityRegistry> = OnceLock::new();
+    REGISTRY.get_or_init(CapabilityRegistry::baseline)
+}
+
 pub struct MessageService<'a> {
     pub(crate) keys: &'a SoftwareKeyStore,
     pub(crate) security_policy: SecurityPolicy,
+    pub(crate) capabilities: &'a CapabilityRegistry,
     pub(crate) limits: MessageLimits,
     pub(crate) remote_resolver: Option<&'a dyn RemotePrivateKeyResolver>,
 }
@@ -42,6 +49,7 @@ impl<'a> MessageService<'a> {
         Self {
             keys,
             security_policy,
+            capabilities: default_capability_registry(),
             limits: MessageLimits::default(),
             remote_resolver: None,
         }
@@ -55,9 +63,15 @@ impl<'a> MessageService<'a> {
         Self {
             keys,
             security_policy,
+            capabilities: default_capability_registry(),
             limits,
             remote_resolver: None,
         }
+    }
+
+    pub fn with_capability_registry(mut self, capabilities: &'a CapabilityRegistry) -> Self {
+        self.capabilities = capabilities;
+        self
     }
 
     /// Enables remote private-key operations for this service instance only.

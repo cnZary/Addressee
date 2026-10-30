@@ -35,6 +35,7 @@ pub use message_types::{
     MessageFormat, MessageLimits, MessageOperation, SignatureMetadata, SignatureVerification,
     SigningKeyRequest, VerificationOutcome, VerificationStatus,
 };
+pub use openpgp_policy::Backend;
 pub use p256_remote::{P256Operations, P256RemoteError, P256RemoteKey};
 pub use remote::{RemoteKeyFailure, RemotePrivateKeyResolver};
 pub use store::SoftwareKeyStore;

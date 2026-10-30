@@ -137,13 +137,29 @@ impl CapabilityEntry {
 
     /// UI enablement requires an implementation and passing relevant tests, never just a claim.
     pub fn is_operation_enabled(&self, operation: Operation) -> bool {
-        if !self.can(operation) {
-            return false;
-        }
+        self.is_operation_enabled_with_runtime_discovery(operation, false)
+    }
+
+    /// Runtime discovery is additional evidence for an authenticated card binding, not a static
+    /// support claim. It never substitutes for implementation, unit, or physical-hardware tests.
+    pub fn is_operation_enabled_with_runtime_discovery(
+        &self,
+        operation: Operation,
+        runtime_discovered: bool,
+    ) -> bool {
         let Some(evidence) = self.evidence(operation) else {
             return false;
         };
-        if evidence.library_claim != LibraryClaim::Claimed
+        let claim_satisfied = match evidence.library_claim {
+            LibraryClaim::Claimed => self.can(operation),
+            LibraryClaim::RuntimeDiscoveryRequired => {
+                runtime_discovered
+                    && self.backend == Backend::OpenPgpCard
+                    && self.requires_runtime_discovery
+            }
+            LibraryClaim::NotClaimed => false,
+        };
+        if !claim_satisfied
             || evidence.implementation != ImplementationStatus::Implemented
             || evidence.unit_tests != TestStatus::Passed
         {
@@ -341,8 +357,27 @@ impl CapabilityRegistry {
         key_version: KeyVersion,
         operation: Operation,
     ) -> bool {
+        self.is_operation_enabled_with_runtime_discovery(
+            algorithm,
+            backend,
+            key_version,
+            operation,
+            false,
+        )
+    }
+
+    pub fn is_operation_enabled_with_runtime_discovery(
+        &self,
+        algorithm: Algorithm,
+        backend: Backend,
+        key_version: KeyVersion,
+        operation: Operation,
+        runtime_discovered: bool,
+    ) -> bool {
         self.entry(algorithm, backend, key_version)
-            .is_some_and(|entry| entry.is_operation_enabled(operation))
+            .is_some_and(|entry| {
+                entry.is_operation_enabled_with_runtime_discovery(operation, runtime_discovered)
+            })
     }
 
     pub fn is_fully_supported(

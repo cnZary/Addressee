@@ -74,7 +74,7 @@ impl MessageService<'_> {
     ///
     /// The output may contain uncommitted plaintext before embedded-signature processing finishes.
     /// Callers must discard it unless `DecryptionReport::may_commit_staging()` returns true.
-    /// That check covers decryption, integrity, and legacy-algorithm policy, not signer trust.
+    /// That check covers decryption, integrity, legacy algorithms, and capability policy, not signer trust.
     /// Ordinary invalid and unknown signers must still be shown with distinct warnings rather
     /// than treated as trusted identities; a policy-rejected signature blocks plaintext release.
     /// SEIPDv1 uses rPGP's default check-first mode and its 1 GiB ciphertext buffer limit.
@@ -213,6 +213,9 @@ fn decrypt_message<'a>(
             if !encrypted_session_key.match_identity(candidate.key) {
                 continue;
             }
+            candidate
+                .validate_capability()
+                .map_err(DecryptFailure::Message)?;
             let result = match candidate.resolve().map_err(DecryptFailure::Message)? {
                 Some(DecryptionKeySource::Software(key)) => {
                     key.key.decrypt(password, values, esk_type)

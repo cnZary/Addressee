@@ -197,6 +197,22 @@ struct DisconnectedCardResolver;
 static DISCONNECTED_CARD_RESOLVER: DisconnectedCardResolver = DisconnectedCardResolver;
 
 impl RemotePrivateKeyResolver for DisconnectedCardResolver {
+    fn backend(
+        &self,
+        _certificate_fingerprint: &FullFingerprint,
+        _component_fingerprint: &FullFingerprint,
+    ) -> Option<openpgp_policy::Backend> {
+        Some(openpgp_policy::Backend::OpenPgpCard)
+    }
+
+    fn runtime_capabilities_verified(
+        &self,
+        _certificate_fingerprint: &FullFingerprint,
+        _component_fingerprint: &FullFingerprint,
+    ) -> bool {
+        true
+    }
+
     fn signing_key(
         &self,
         _certificate_fingerprint: &FullFingerprint,
@@ -225,6 +241,27 @@ impl RemotePrivateKeyResolver for DisconnectedCardResolver {
 }
 
 impl RemotePrivateKeyResolver for RemoteRegistry {
+    fn backend(
+        &self,
+        certificate_fingerprint: &FullFingerprint,
+        component_fingerprint: &FullFingerprint,
+    ) -> Option<openpgp_policy::Backend> {
+        self.resolver(certificate_fingerprint)?
+            .backend(certificate_fingerprint, component_fingerprint)
+    }
+
+    fn runtime_capabilities_verified(
+        &self,
+        certificate_fingerprint: &FullFingerprint,
+        component_fingerprint: &FullFingerprint,
+    ) -> bool {
+        self.resolver(certificate_fingerprint)
+            .is_some_and(|resolver| {
+                resolver
+                    .runtime_capabilities_verified(certificate_fingerprint, component_fingerprint)
+            })
+    }
+
     fn signing_key(
         &self,
         certificate_fingerprint: &FullFingerprint,
