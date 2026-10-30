@@ -1,4 +1,5 @@
 import UIKit
+import UIKit
 import XCTest
 
 @MainActor
@@ -66,6 +67,7 @@ final class AddresseeUITests: XCTestCase {
     }
 
     func testLongTextInputsClearAndPaste() {
+        UIPasteboard.general.string = "Pasted first line\nPasted second line"
         tabButton("tab.sign").tap()
         assertClearAndPaste("field.signature.signText")
 

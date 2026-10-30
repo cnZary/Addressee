@@ -20,7 +20,7 @@ fi
 CARD_USB_OPERATION="${CARD_USB_OPERATION:-association}"
 case "$CARD_USB_OPERATION" in
     association) ;;
-    signing|decryption)
+    signing|attached-signing|decryption)
         python3 - <<'PY'
 import os
 if not 0 < len(os.environ.get("CARD_TEST_PIN", "").encode()) <= 128:
@@ -28,7 +28,7 @@ if not 0 < len(os.environ.get("CARD_TEST_PIN", "").encode()) <= 128:
 PY
         ;;
     *)
-        echo "CARD_USB_OPERATION must be association, signing, or decryption." >&2
+        echo "CARD_USB_OPERATION must be association, signing, attached-signing, or decryption." >&2
         exit 2
         ;;
 esac
@@ -132,6 +132,9 @@ TEST_ID='AppleSmartCardDeviceTests/testUSBAssociationAndCleanClose()'
 case "$CARD_USB_OPERATION" in
     signing)
         TEST_ID='AppleSmartCardDeviceTests/testUSBPrivateKeySigning()'
+        ;;
+    attached-signing)
+        TEST_ID='AppleSmartCardDeviceTests/testUSBPrivateKeyAttachedSigning()'
         ;;
     decryption)
         TEST_ID='AppleSmartCardDeviceTests/testUSBPrivateKeyDecryption()'
@@ -289,6 +292,12 @@ if operation == "signing":
     export_attachment("usb-signing-signature_0_", "signature.sig", 1024 * 1024)
     if payload.read_bytes() != b"Physical USB short signing session":
         raise SystemExit("The exported USB signing payload does not match the test input")
+if operation == "attached-signing":
+    payload = export_attachment("usb-attached-signing-payload_0_", "payload.bin", 1024 * 1024)
+    export_attachment("usb-attached-signing-message_0_", "attached-message.pgp", 16 * 1024 * 1024)
+    export_attachment("usb-attached-signing-tampered_0_", "tampered-attached-message.pgp", 16 * 1024 * 1024)
+    if payload.read_bytes() != b"Physical USB attached signing\0\r\nSecond line":
+        raise SystemExit("The exported USB attached-signature payload does not match the test input")
 if peer_input == "gpg":
     for argument, name in ((6, "gpg-peer-encrypted.pgp"), (7, "gpg-peer-plaintext.bin")):
         peer_file = Path(sys.argv[argument])
@@ -301,3 +310,7 @@ if operation == "association":
 else:
     print(f"Only the selected USB {operation} workflow and its public setup and closure passed.")
 PY
+
+if [[ "$CARD_USB_OPERATION" == attached-signing ]]; then
+    python3 "$ROOT_DIR/scripts/verify-usb-attached-signature.py" "$CARD_USB_FIXTURE" "$OUTPUT"
+fi

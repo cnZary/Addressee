@@ -6,10 +6,6 @@ if [[ -z "${SIMULATOR_ID:-}" ]]; then
 fi
 export SIMULATOR_ID
 
-PASTE_TEXT='Pasted first line
-Pasted second line'
-printf '%s' "$PASTE_TEXT" | xcrun simctl pbcopy "$SIMULATOR_ID"
-
 RESULT_BUNDLE="$ROOT_DIR/build/TextInputTests.xcresult"
 rm -rf "$RESULT_BUNDLE"
 xcodebuild -quiet \

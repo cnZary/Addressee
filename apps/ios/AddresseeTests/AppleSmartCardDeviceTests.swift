@@ -212,15 +212,49 @@ final class AppleSmartCardDeviceTests: XCTestCase {
         #endif
     }
 
+    private enum USBPrivateKeyWorkflow {
+        case signing
+        case attachedSigning
+        case decryption
+
+        var operationName: String {
+            switch self {
+            case .signing: "signing"
+            case .attachedSigning: "attached-signing"
+            case .decryption: "decryption"
+            }
+        }
+
+        var privateKeyOperation: PrivateKeyOperation {
+            switch self {
+            case .signing, .attachedSigning: .signing
+            case .decryption: .decryption
+            }
+        }
+
+        func componentFingerprint(in fixture: CardDeviceFixture) throws -> String {
+            switch self {
+            case .signing, .attachedSigning:
+                try XCTUnwrap(fixture.signingComponent)
+            case .decryption:
+                try XCTUnwrap(fixture.decryptionComponent)
+            }
+        }
+    }
+
     func testUSBPrivateKeySigning() async throws {
-        try await runUSBPrivateKeyTest(operation: .signing)
+        try await runUSBPrivateKeyTest(workflow: .signing)
+    }
+
+    func testUSBPrivateKeyAttachedSigning() async throws {
+        try await runUSBPrivateKeyTest(workflow: .attachedSigning)
     }
 
     func testUSBPrivateKeyDecryption() async throws {
-        try await runUSBPrivateKeyTest(operation: .decryption)
+        try await runUSBPrivateKeyTest(workflow: .decryption)
     }
 
-    private func runUSBPrivateKeyTest(operation: PrivateKeyOperation) async throws {
+    private func runUSBPrivateKeyTest(workflow: USBPrivateKeyWorkflow) async throws {
         let environment = ProcessInfo.processInfo.environment
         guard environment["ADDRESSEE_CARD_USB_PRIVATE_KEY_TESTS"] == "1" else {
             throw XCTSkip("Physical USB private-key tests require an explicit fixture, PIN, and opt-in")
@@ -235,16 +269,9 @@ final class AppleSmartCardDeviceTests: XCTestCase {
               !pin.isEmpty, pin.utf8.count <= 128 else {
             throw CardDeviceTestError.invalidTestConfiguration
         }
-        let operationName: String
-        let componentFingerprint: String
-        switch operation {
-        case .signing:
-            operationName = "signing"
-            componentFingerprint = try XCTUnwrap(fixture.signingComponent)
-        case .decryption:
-            operationName = "decryption"
-            componentFingerprint = try XCTUnwrap(fixture.decryptionComponent)
-        }
+        let operation = workflow.privateKeyOperation
+        let operationName = workflow.operationName
+        let componentFingerprint = try workflow.componentFingerprint(in: fixture)
         let readers = try await CardTransportFactory().readerNames()
         guard readers == [readerName] else {
             XCTFail("The unique USB reader does not match the explicitly selected test reader")
@@ -345,7 +372,7 @@ final class AppleSmartCardDeviceTests: XCTestCase {
 
         let at = UInt64(Date().timeIntervalSince1970) + 60
         var messageSource = "local"
-        switch operation {
+        switch workflow {
         case .signing:
             let payload = Data("Physical USB short signing session".utf8)
             let signature = try await Self.respondToCardInteractions(
@@ -377,6 +404,52 @@ final class AppleSmartCardDeviceTests: XCTestCase {
             signatureAttachment.name = "usb-signing-signature.sig"
             signatureAttachment.lifetime = .keepAlways
             add(signatureAttachment)
+        case .attachedSigning:
+            let payload = Data("Physical USB attached signing\0\r\nSecond line".utf8)
+            let signature = try await Self.respondToCardInteractions(
+                interaction: restoredInteraction,
+                pin: pin
+            ) {
+                try await restored.signAttached(
+                    signingKey: fingerprint,
+                    password: "",
+                    atUnixSeconds: at,
+                    data: payload,
+                    format: .binary,
+                    connection: connection
+                )
+            }
+            XCTAssertEqual(signature.metadata.signerFingerprint, componentFingerprint)
+            let verification = try await restored.verifyAttached(
+                input: signature.artifact,
+                atUnixSeconds: at
+            )
+            XCTAssertEqual(verification.outcome.status, .valid)
+            XCTAssertEqual(verification.outcome.signatures.first?.signerFingerprint, componentFingerprint)
+            XCTAssertEqual(verification.plaintext, payload)
+
+            var tampered = signature.artifact
+            let lastIndex = tampered.index(before: tampered.endIndex)
+            tampered[lastIndex] ^= 0x01
+            let tamperedRejected: Bool
+            do {
+                let rejected = try await restored.verifyAttached(input: tampered, atUnixSeconds: at)
+                tamperedRejected = rejected.outcome.status == .invalid && rejected.plaintext != payload
+            } catch {
+                tamperedRejected = true
+            }
+            XCTAssertTrue(tamperedRejected)
+
+            for (name, data) in [
+                ("usb-attached-signing-payload.bin", payload),
+                ("usb-attached-signing-message.pgp", signature.artifact),
+                ("usb-attached-signing-tampered.pgp", tampered),
+            ] {
+                let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.data")
+                attachment.name = name
+                attachment.lifetime = .keepAlways
+                add(attachment)
+            }
         case .decryption:
             let plaintext: Data
             let encrypted: Data
