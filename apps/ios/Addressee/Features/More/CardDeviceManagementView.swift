@@ -2,23 +2,31 @@ import SwiftUI
 
 struct CardDeviceManagementView: View {
     @ObservedObject var model: OpenPgpApplicationModel
-    let registration: CardRegistrationFfi
+    let identity: CardIdentityFfi
     @State private var information: CardInformationFfi?
-    @State private var connection = CardConnectionSelection()
+    @State private var connection: CardConnectionSelection
     @State private var pinKind = CardPinKind.user
     @State private var showPinChange = false
     @State private var touchSlot = CardSlot.signing
     @State private var showTouchChange = false
 
+    init(
+        model: OpenPgpApplicationModel,
+        identity: CardIdentityFfi,
+        information: CardInformationFfi?,
+        connection: CardConnectionSelection
+    ) {
+        self.model = model
+        self.identity = identity
+        _information = State(initialValue: information)
+        _connection = State(initialValue: connection)
+    }
+
     var body: some View {
         Form {
             Section("hardware.device.identity") {
-                LabeledContent("card.identity", value: registration.identity.displayIdentifier)
+                LabeledContent("card.identity", value: identity.displayIdentifier)
                 LabeledContent("hardware.openpgpVersion", value: version)
-                LabeledContent("hardware.certificate", value: certificateName)
-                Text(registration.certificateFingerprint)
-                    .font(.caption2)
-                    .textSelection(.enabled)
             }
 
             CardConnectionPicker(
@@ -69,6 +77,11 @@ struct CardDeviceManagementView: View {
                                 Text(fingerprint)
                                     .font(.caption2)
                                     .textSelection(.enabled)
+                                ForEach(matchingCertificates(for: fingerprint), id: \.fingerprint) { certificate in
+                                    LabeledContent("hardware.certificateMatch") {
+                                        Text(certificate.displayName)
+                                    }
+                                }
                             }
                             if let createdAt = slot.createdAt {
                                 LabeledContent(
@@ -144,13 +157,10 @@ struct CardDeviceManagementView: View {
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen.more.hardware.device")
-        .onAppear {
-            connection = model.preferredCardConnection(for: registration.certificateFingerprint)
-        }
         .sheet(isPresented: $showPinChange) {
             CardPinChangeView(
                 model: model,
-                fingerprint: registration.certificateFingerprint,
+                identity: identity,
                 kind: pinKind,
                 connection: connection
             ) { information = $0 }
@@ -159,7 +169,7 @@ struct CardDeviceManagementView: View {
             if let information {
                 CardTouchPolicyView(
                     model: model,
-                    fingerprint: registration.certificateFingerprint,
+                    identity: identity,
                     slot: touchSlot,
                     information: information,
                     connection: connection
@@ -169,12 +179,14 @@ struct CardDeviceManagementView: View {
     }
 
     private var version: String {
-        "\(registration.identity.version >> 8).\(registration.identity.version & 0xFF)"
+        "\(identity.version >> 8).\(identity.version & 0xFF)"
     }
 
-    private var certificateName: String {
-        model.keys.first { $0.fingerprint == registration.certificateFingerprint }?.displayName
-            ?? registration.certificateFingerprint
+    private func matchingCertificates(for fingerprint: String) -> [CertificateSummary] {
+        model.keys.filter { certificate in
+            certificate.fingerprint == fingerprint
+                || certificate.subkeys.contains { $0.fingerprint == fingerprint }
+        }
     }
 
     private func keyPresence(_ present: Bool?) -> String {
@@ -202,8 +214,8 @@ struct CardDeviceManagementView: View {
 
     private func inspect() async {
         do {
-            information = try await model.inspectCard(
-                fingerprint: registration.certificateFingerprint,
+            information = try await model.inspectHardware(
+                identity: identity,
                 connection: connection
             )
         } catch {}
@@ -212,7 +224,7 @@ struct CardDeviceManagementView: View {
 
 private struct CardPinChangeView: View {
     @ObservedObject var model: OpenPgpApplicationModel
-    let fingerprint: String
+    let identity: CardIdentityFfi
     let kind: CardPinKind
     let connection: CardConnectionSelection
     let onUpdate: (CardInformationFfi) -> Void
@@ -292,8 +304,8 @@ private struct CardPinChangeView: View {
 
     private func apply() async {
         do {
-            let information = try await model.changeCardPin(
-                fingerprint: fingerprint,
+            let information = try await model.changeHardwarePin(
+                identity: identity,
                 kind: kind,
                 current: current,
                 new: new,
@@ -316,7 +328,7 @@ private struct CardPinChangeView: View {
 
 private struct CardTouchPolicyView: View {
     @ObservedObject var model: OpenPgpApplicationModel
-    let fingerprint: String
+    let identity: CardIdentityFfi
     let slot: CardSlot
     let information: CardInformationFfi
     let connection: CardConnectionSelection
@@ -391,8 +403,8 @@ private struct CardTouchPolicyView: View {
 
     private func apply() async {
         do {
-            let information = try await model.setCardTouchPolicy(
-                fingerprint: fingerprint,
+            let information = try await model.setHardwareTouchPolicy(
+                identity: identity,
                 slot: slot,
                 policy: policy,
                 adminPin: adminPin,

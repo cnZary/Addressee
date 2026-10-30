@@ -21,6 +21,20 @@ struct OpenedCardSession: Sendable {
     var describeFailure: (@Sendable (Error, CardOperationStage) -> Error)?
 }
 
+struct CardManagementOpenRequest: Sendable {
+    let method: CardConnectionMethod
+    let readerName: String?
+    let expectedIdentity: CardIdentityFfi?
+    let alertMessage: String
+}
+
+struct OpenedCardManagementSession: Sendable {
+    let identity: CardIdentityFfi
+    let connection: ConnectedCardTransport
+    let management: @Sendable () async throws -> OpenPgpCardManagementSession
+    var describeFailure: (@Sendable (Error, CardOperationStage) -> Error)?
+}
+
 @MainActor
 protocol CardSessionManaging: AnyObject, Sendable {
     var registrations: [CardRegistrationFfi] { get }
@@ -43,8 +57,8 @@ protocol CardSessionManaging: AnyObject, Sendable {
         connection: CardConnectionSelection,
         body: @escaping @Sendable () async throws -> T
     ) async throws -> T
-    func withCardManagementSession<T: Sendable>(
-        certificateFingerprint: String,
+    func withUnboundCardManagementSession<T: Sendable>(
+        expectedIdentity: CardIdentityFfi?,
         connection: CardConnectionSelection,
         operation: @escaping @Sendable (OpenPgpCardManagementSession) async throws -> T
     ) async throws -> T
@@ -60,6 +74,7 @@ final class CardSessionManager: CardSessionManaging {
     private let store: CardBindingStore
     private let preferences: CardConnectionPreferenceStore
     private let openSession: @Sendable (CardSessionOpenRequest) async throws -> OpenedCardSession
+    private let openManagement: @Sendable (CardManagementOpenRequest) async throws -> OpenedCardManagementSession
     private let reserveCard: @Sendable (CardRegistrationFfi) async throws -> Void
     private let releaseCard: @Sendable (String) async throws -> Void
     private let detachCard: @Sendable (String) async throws -> Void
@@ -75,6 +90,7 @@ final class CardSessionManager: CardSessionManaging {
         store: CardBindingStore = .inMemory(),
         preferences: CardConnectionPreferenceStore = CardConnectionPreferenceStore(),
         openSession: (@Sendable (CardSessionOpenRequest) async throws -> OpenedCardSession)? = nil,
+        openManagement: (@Sendable (CardManagementOpenRequest) async throws -> OpenedCardManagementSession)? = nil,
         reserveCard: (@Sendable (CardRegistrationFfi) async throws -> Void)? = nil,
         releaseCard: (@Sendable (String) async throws -> Void)? = nil,
         detachCard: (@Sendable (String) async throws -> Void)? = nil,
@@ -145,7 +161,7 @@ final class CardSessionManager: CardSessionManaging {
                     )
                     let identity = try readCardIdentity(transport: bridge)
                     if let expected = request.expectedIdentity, identity != expected {
-                        throw AddresseeError.ConflictingCertificate
+                        throw AddresseeError.CardRegistrationConflict
                     }
                     return try OpenPgpCardSession.connect(
                         identity: identity,
@@ -184,6 +200,53 @@ final class CardSessionManager: CardSessionManaging {
                     authorization: { slot in
                         try await Task.detached(priority: .userInitiated) {
                             try session.authorizationRequirements(slot: slot)
+                        }.value
+                    },
+                    describeFailure: { error, stage in
+                        diagnostics.failure(error, stage: stage)
+                    }
+                )
+            } catch {
+                await interaction.cancelActiveInteraction()
+                try? await opened.close()
+                throw diagnostics.failure(error)
+            }
+        }
+        self.openManagement = openManagement ?? { [transports, interaction] request in
+            let diagnostics = CardSessionDiagnostics(method: request.method)
+            let opened: ConnectedCardTransport
+            do {
+                opened = try await transports.connect(
+                    method: request.method,
+                    readerName: request.readerName,
+                    alertMessage: request.alertMessage
+                )
+            } catch {
+                throw diagnostics.failure(error, stage: .connecting)
+            }
+            opened.updateAlertMessage(String(localized: "hardware.nfc.reading"))
+            do {
+                let bridge = CardTransportBridge(
+                    transport: opened.transport,
+                    capabilities: opened.capabilities,
+                    onStatus: { diagnostics.record(status: $0) },
+                    onDiagnostic: { diagnostics.record($0) }
+                )
+                let identity = try await Task.detached(priority: .userInitiated) {
+                    try readCardIdentity(transport: bridge)
+                }.value
+                if let expected = request.expectedIdentity, identity != expected {
+                    throw AddresseeError.CardRegistrationConflict
+                }
+                return OpenedCardManagementSession(
+                    identity: identity,
+                    connection: opened,
+                    management: {
+                        try await Task.detached(priority: .userInitiated) {
+                            try OpenPgpCardManagementSession.connect(
+                                identity: identity,
+                                transport: bridge
+                            )
                         }.value
                     },
                     describeFailure: { error, stage in
@@ -361,31 +424,28 @@ final class CardSessionManager: CardSessionManaging {
         )
     }
 
-    func withCardManagementSession<T: Sendable>(
-        certificateFingerprint: String,
+    func withUnboundCardManagementSession<T: Sendable>(
+        expectedIdentity: CardIdentityFfi?,
         connection: CardConnectionSelection,
         operation: @escaping @Sendable (OpenPgpCardManagementSession) async throws -> T
     ) async throws -> T {
-        try await restore()
-        guard let binding = bindings[certificateFingerprint] else {
-            throw AddresseeError.CardSessionUnavailable
-        }
         try connection.validate()
         try beginTransition()
-        defer { isTransitioning = false }
-        try await ensureReserved(binding)
-        try await ensureDetached(certificateFingerprint: certificateFingerprint)
-        var opened: OpenedCardSession?
+        defer {
+            interaction.cancelActiveInteraction()
+            isTransitioning = false
+        }
+        var opened: OpenedCardManagementSession?
         var finished = false
         do {
-            let session = try await openSession(openRequest(
-                binding: binding,
-                selection: connection,
-                alertMessage: String(localized: "hardware.nfc.managementAlert"),
-                interactionMode: .interactive
+            let session = try await openManagement(CardManagementOpenRequest(
+                method: connection.method,
+                readerName: connection.readerName,
+                expectedIdentity: expectedIdentity,
+                alertMessage: String(localized: "hardware.nfc.managementAlert")
             ))
             opened = session
-            guard session.registration == binding.registration else {
+            if let expectedIdentity, session.identity != expectedIdentity {
                 throw AddresseeError.CardRegistrationConflict
             }
             let management = try await session.management()
@@ -396,17 +456,14 @@ final class CardSessionManager: CardSessionManaging {
                 try await operation(management)
             }.value
             finished = true
-            try await finish(
-                session,
-                attached: false,
+            try await session.connection.close(
                 successMessage: String(localized: "hardware.nfc.managementComplete")
             )
-            preferences.record(connection, for: certificateFingerprint)
             return result
         } catch {
             interaction.cancelActiveInteraction()
             if let opened, !finished {
-                try? await finish(opened, attached: false, successMessage: nil)
+                try? await opened.connection.close()
             }
             throw opened?.describeFailure?(error, .management) ?? error
         }

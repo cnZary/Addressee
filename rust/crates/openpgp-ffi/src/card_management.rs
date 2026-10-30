@@ -96,7 +96,7 @@ impl OpenPgpCardManagementSession {
         let actual = CardSession::identify_with_transport(raw)
             .map_err(|error| map_management_error(&transport, error))?;
         if CardIdentityFfi::from(actual) != identity {
-            return Err(AddresseeError::ConflictingCertificate);
+            return Err(AddresseeError::CardRegistrationConflict);
         }
         let backend = TransportCardBackend::new(transport.clone())
             .map_err(|error| map_management_error(&transport, RemoteKeyError::Transport(error)))?;
@@ -334,7 +334,7 @@ impl OpenPgpCardManagementSession {
             .map(CardIdentityFfi::from)
             .map_err(|error| self.map_error(error))?;
         if identity != self.identity {
-            return Err(AddresseeError::ConflictingCertificate);
+            return Err(AddresseeError::CardRegistrationConflict);
         }
         Ok(identity)
     }

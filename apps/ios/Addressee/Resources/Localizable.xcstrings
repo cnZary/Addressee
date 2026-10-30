@@ -1430,13 +1430,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The card does not match this certificate, or a conflicting card session already exists."
+            "value" : "The card identity or its key slots do not match this certificate association, or a conflicting card session already exists."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "卡片与证书不匹配，或已存在冲突的卡片会话。"
+            "value" : "卡片身份或其密钥槽位与此证书的关联不匹配，或已存在冲突的卡片会话。"
           }
         }
       }
@@ -2293,6 +2293,22 @@
         }
       }
     },
+    "hardware.certificateMatch" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Matching Public Certificate"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "匹配的公钥证书"
+          }
+        }
+      }
+    },
     "hardware.component.none" : {
       "localizations" : {
         "en" : {
@@ -2434,6 +2450,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "管理安全密钥"
+          }
+        }
+      }
+    },
+    "hardware.detectedDevice" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detected Card"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检测到的卡片"
+          }
+        }
+      }
+    },
+    "hardware.manageDetected" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View slots and manage this card"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看密钥槽位并管理此卡片"
+          }
+        }
+      }
+    },
+    "hardware.standaloneManagement" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manage the currently connected card without creating or requiring a certificate association."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "直接管理当前连接的卡片，无需创建或依赖证书关联。"
           }
         }
       }

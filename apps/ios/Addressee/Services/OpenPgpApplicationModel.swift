@@ -184,14 +184,13 @@ final class OpenPgpApplicationModel: ObservableObject {
         cardSessions.preferredConnection(for: fingerprint)
     }
 
-    func inspectCard(
-        fingerprint: String,
-        connection: CardConnectionSelection? = nil
+    func inspectHardware(
+        identity: CardIdentityFfi? = nil,
+        connection: CardConnectionSelection
     ) async throws -> CardInformationFfi {
-        let connection = connection ?? preferredCardConnection(for: fingerprint)
-        return try await perform(refresh: false) { [cardSessions] in
-            try await cardSessions.withCardManagementSession(
-                certificateFingerprint: fingerprint,
+        try await perform(refresh: false) { [cardSessions] in
+            try await cardSessions.withUnboundCardManagementSession(
+                expectedIdentity: identity,
                 connection: connection
             ) { session in
                 try session.inspect()
@@ -199,17 +198,16 @@ final class OpenPgpApplicationModel: ObservableObject {
         }
     }
 
-    func changeCardPin(
-        fingerprint: String,
+    func changeHardwarePin(
+        identity: CardIdentityFfi,
         kind: CardPinKind,
         current: String,
         new: String,
-        connection: CardConnectionSelection? = nil
+        connection: CardConnectionSelection
     ) async throws -> CardInformationFfi {
-        let connection = connection ?? preferredCardConnection(for: fingerprint)
-        return try await perform(refresh: false) { [cardSessions] in
-            try await cardSessions.withCardManagementSession(
-                certificateFingerprint: fingerprint,
+        try await perform(refresh: false) { [cardSessions] in
+            try await cardSessions.withUnboundCardManagementSession(
+                expectedIdentity: identity,
                 connection: connection
             ) { session in
                 try session.changePin(kind: kind, current: current, new: new)
@@ -218,17 +216,16 @@ final class OpenPgpApplicationModel: ObservableObject {
         }
     }
 
-    func setCardTouchPolicy(
-        fingerprint: String,
+    func setHardwareTouchPolicy(
+        identity: CardIdentityFfi,
         slot: CardSlot,
         policy: CardTouchPolicyFfi,
         adminPin: String,
-        connection: CardConnectionSelection? = nil
+        connection: CardConnectionSelection
     ) async throws -> CardInformationFfi {
-        let connection = connection ?? preferredCardConnection(for: fingerprint)
-        return try await perform(refresh: false) { [cardSessions] in
-            try await cardSessions.withCardManagementSession(
-                certificateFingerprint: fingerprint,
+        try await perform(refresh: false) { [cardSessions] in
+            try await cardSessions.withUnboundCardManagementSession(
+                expectedIdentity: identity,
                 connection: connection
             ) { session in
                 try session.setTouchPolicy(slot: slot, policy: policy, adminPin: adminPin)

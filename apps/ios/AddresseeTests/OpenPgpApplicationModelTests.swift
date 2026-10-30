@@ -149,7 +149,7 @@ final class OpenPgpApplicationModelTests: XCTestCase {
         XCTAssertFalse(cardModel.canSubmitPrivateKeyOperation(fingerprint: fingerprint, password: ""))
     }
 
-    func testCardInspectionReturnsPublicInformationWithoutChangingKeyStorage() async throws {
+    func testStandaloneCardInspectionDoesNotRequireOrChangeAssociations() async throws {
         let sessions = MockCardSessions()
         let model = OpenPgpApplicationModel(cardSessions: sessions)
         await model.load()
@@ -164,12 +164,14 @@ final class OpenPgpApplicationModelTests: XCTestCase {
         )
         sessions.activate(registration)
 
-        let information = try await model.inspectCard(
-            fingerprint: registration.certificateFingerprint
+        let information = try await model.inspectHardware(
+            identity: registration.identity,
+            connection: CardConnectionSelection()
         )
         XCTAssertEqual(information.identity, registration.identity)
         XCTAssertEqual(information.slots.count, 3)
         XCTAssertEqual(information.slots[0].touchPolicy, "Off")
+        XCTAssertEqual(sessions.lastManagementExpectedIdentity, registration.identity)
         XCTAssertTrue(model.keys.isEmpty)
         XCTAssertEqual(model.cardRegistrations, [registration])
     }
@@ -178,6 +180,7 @@ final class OpenPgpApplicationModelTests: XCTestCase {
 @MainActor
 private final class MockCardSessions: CardSessionManaging {
     private(set) var registrations: [CardRegistrationFfi] = []
+    private(set) var lastManagementExpectedIdentity: CardIdentityFfi?
     var onChange: (([CardRegistrationFfi]) -> Void)?
 
     func activate(_ registration: CardRegistrationFfi) {
@@ -217,16 +220,17 @@ private final class MockCardSessions: CardSessionManaging {
         try await body()
     }
 
-    func withCardManagementSession<T: Sendable>(
-        certificateFingerprint: String,
+    func withUnboundCardManagementSession<T: Sendable>(
+        expectedIdentity: CardIdentityFfi?,
         connection: CardConnectionSelection,
         operation: @escaping @Sendable (OpenPgpCardManagementSession) async throws -> T
     ) async throws -> T {
-        guard let identity = registrations.first(where: {
-            $0.certificateFingerprint == certificateFingerprint
-        })?.identity else {
-            throw AddresseeError.CardSessionUnavailable
-        }
+        lastManagementExpectedIdentity = expectedIdentity
+        let identity = expectedIdentity ?? registrations.first?.identity ?? CardIdentityFfi(
+            manufacturer: 0xF1D0,
+            serial: 0x10203040,
+            version: 0x0304
+        )
         let bridge = CardTransportBridge(
             transport: ScriptedManagementTransport(),
             capabilities: .shortOnly

@@ -508,15 +508,13 @@ final class CardSessionManagerTests: XCTestCase {
         await assertEqual(await spy.requests.count, 0)
     }
 
-    func testManagementReadsPublicInformationWithoutAttachingPrivateKeys() async throws {
+    func testManagementReadsPublicInformationWithoutCertificateAssociation() async throws {
         let registration = makeRegistration()
         let spy = CardSessionSpy(registration: registration)
-        let manager = makeManager(spy: spy, publicOnly: [registration.certificateFingerprint])
-        try await link(manager, registration: registration, method: .nfc)
-        await spy.clearEvents()
+        let manager = makeManager(spy: spy, publicOnly: [])
 
-        let information = try await manager.withCardManagementSession(
-            certificateFingerprint: registration.certificateFingerprint,
+        let information = try await manager.withUnboundCardManagementSession(
+            expectedIdentity: nil,
             connection: CardConnectionSelection()
         ) { session in
             await spy.operate("inspect")
@@ -526,18 +524,19 @@ final class CardSessionManagerTests: XCTestCase {
         XCTAssertEqual(information.slots.count, 3)
         XCTAssertEqual(information.userPinRetries, 3)
         assertOperationEvents(await spy.events, [
-            "reserve", "open", "management", "operate", "close",
+            "open", "management", "operate", "close",
         ])
         await assertEqual(await spy.events.last, .close(String(localized: "hardware.nfc.managementComplete")))
         await assertFalse(await spy.isAttached)
-        let request = try await unwrap(await spy.requests.first)
+        let request = try await unwrap(await spy.managementRequests.first)
         XCTAssertEqual(request.method, .nfc)
-        XCTAssertEqual(request.expectedIdentity, registration.identity)
+        XCTAssertNil(request.expectedIdentity)
         XCTAssertEqual(request.alertMessage, String(localized: "hardware.nfc.managementAlert"))
         await assertEqual(await spy.operationGuidance["inspect"], [
             String(localized: "hardware.nfc.managementInProgress"),
         ])
-        XCTAssertEqual(manager.registrations, [registration])
+        XCTAssertTrue(manager.registrations.isEmpty)
+        await assertEqual(await spy.requests.count, 0)
     }
 
     func testManagementFailureClosesWithoutSuccessAndPreservesTheAssociation() async throws {
@@ -548,8 +547,8 @@ final class CardSessionManagerTests: XCTestCase {
         await spy.clearEvents()
 
         do {
-            _ = try await manager.withCardManagementSession(
-                certificateFingerprint: registration.certificateFingerprint,
+            _ = try await manager.withUnboundCardManagementSession(
+                expectedIdentity: registration.identity,
                 connection: manager.preferredConnection(for: registration.certificateFingerprint)
             ) { _ in
                 await spy.operate("management failure")
@@ -560,7 +559,7 @@ final class CardSessionManagerTests: XCTestCase {
             XCTAssertEqual(error as? TestFailure, .operation)
         }
         assertOperationEvents(await spy.events, [
-            "reserve", "open", "management", "operate", "close",
+            "open", "management", "operate", "close",
         ])
         await assertEqual(await spy.events.last, .close(nil))
         await assertFalse(await spy.isAttached)
@@ -570,25 +569,23 @@ final class CardSessionManagerTests: XCTestCase {
     func testChangedCardIsRejectedBeforeCreatingTheManagementSession() async throws {
         let registration = makeRegistration()
         let spy = CardSessionSpy(registration: registration)
-        let manager = makeManager(spy: spy, publicOnly: [registration.certificateFingerprint])
-        try await link(manager, registration: registration, method: .nfc)
+        let manager = makeManager(spy: spy, publicOnly: [])
         var changed = registration
         changed.identity.serial ^= 1
         await spy.setNextRegistration(changed)
-        await spy.clearEvents()
 
         do {
-            _ = try await manager.withCardManagementSession(
-                certificateFingerprint: registration.certificateFingerprint,
+            _ = try await manager.withUnboundCardManagementSession(
+                expectedIdentity: registration.identity,
                 connection: CardConnectionSelection()
             ) { _ in "must not run" }
             XCTFail("A different physical card must not reach management")
         } catch {
             XCTAssertEqual(error as? AddresseeError, .CardRegistrationConflict)
         }
-        assertOperationEvents(await spy.events, ["reserve", "open", "close"])
+        assertOperationEvents(await spy.events, ["open", "close"])
         await assertEqual(await spy.events.last, .close(nil))
-        XCTAssertEqual(manager.registrations, [registration])
+        XCTAssertTrue(manager.registrations.isEmpty)
     }
 
     private func assertOperationEvents(
@@ -650,6 +647,7 @@ final class CardSessionManagerTests: XCTestCase {
     ) -> CardSessionManager {
         makeManager(
             spies: [spy.registration.certificateFingerprint: spy],
+            managementSpy: spy,
             store: store,
             interaction: interaction,
             publicOnly: publicOnly
@@ -658,6 +656,7 @@ final class CardSessionManagerTests: XCTestCase {
 
     private func makeManager(
         spies: [String: CardSessionSpy],
+        managementSpy: CardSessionSpy? = nil,
         store: CardBindingStore = .inMemory(),
         interaction: CardInteractionCoordinator? = nil,
         publicOnly: Set<String>
@@ -689,6 +688,10 @@ final class CardSessionManagerTests: XCTestCase {
                     throw AddresseeError.CardRegistrationConflict
                 }
                 return try await spy.open(request)
+            },
+            openManagement: { request in
+                guard let managementSpy else { throw AddresseeError.CardSessionUnavailable }
+                return try await managementSpy.openManagement(request)
             },
             reserveCard: { registration in
                 await spies[registration.certificateFingerprint]?.reserve(registration)
@@ -788,6 +791,7 @@ private actor CardSessionSpy {
     private var attached = false
     private var pinRetries: UInt8 = 3
     private(set) var requests: [CardSessionOpenRequest] = []
+    private(set) var managementRequests: [CardManagementOpenRequest] = []
     private(set) var events: [CardSessionEvent] = []
     private(set) var operationGuidance: [String: [String]] = [:]
 
@@ -825,6 +829,7 @@ private actor CardSessionSpy {
     func clearEvents() {
         events.removeAll()
         requests.removeAll()
+        managementRequests.removeAll()
         operationGuidance.removeAll()
         alertRecorder.removeAll()
     }
@@ -873,11 +878,7 @@ private actor CardSessionSpy {
     func open(_ request: CardSessionOpenRequest) throws -> OpenedCardSession {
         requests.append(request)
         events.append(.open)
-        let registration = if registrationSequence.isEmpty {
-            registration
-        } else {
-            registrationSequence.removeFirst()
-        }
+        let registration = nextRegistration()
         let transport = ScriptedManagementTransport()
         let bridge = CardTransportBridge(transport: transport, capabilities: .shortOnly)
         let connection = ConnectedCardTransport(
@@ -909,6 +910,45 @@ private actor CardSessionSpy {
                 await self.authorization(slot: slot)
             }
         )
+    }
+
+    func openManagement(_ request: CardManagementOpenRequest) throws -> OpenedCardManagementSession {
+        managementRequests.append(request)
+        events.append(.open)
+        let registration = nextRegistration()
+        let transport = ScriptedManagementTransport()
+        let bridge = CardTransportBridge(transport: transport, capabilities: .shortOnly)
+        let connection = ConnectedCardTransport(
+            transport: transport,
+            capabilities: .shortOnly,
+            onAlertMessage: { message in
+                self.alertRecorder.record(message)
+            },
+            onClose: { message in
+                try await self.close(message)
+            }
+        )
+        return OpenedCardManagementSession(
+            identity: registration.identity,
+            connection: connection,
+            management: {
+                await self.noteManagement()
+                return try await Task.detached(priority: .userInitiated) {
+                    try OpenPgpCardManagementSession.connect(
+                        identity: registration.identity,
+                        transport: bridge
+                    )
+                }.value
+            }
+        )
+    }
+
+    private func nextRegistration() -> CardRegistrationFfi {
+        if registrationSequence.isEmpty {
+            registration
+        } else {
+            registrationSequence.removeFirst()
+        }
     }
 
     private func close(_ message: String?) throws {

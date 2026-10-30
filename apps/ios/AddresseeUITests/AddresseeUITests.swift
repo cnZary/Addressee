@@ -292,8 +292,9 @@ final class AddresseeUITests: XCTestCase {
             XCTAssertTrue(app.tabBars.firstMatch.exists)
 
             if linkIdentifier == "navigation.more.hardware" {
-                XCTAssertTrue(element("hardware.linkFromKeys").waitForExistence(timeout: 5))
-                XCTAssertFalse(element("action.hardware.connect").exists)
+                XCTAssertTrue(element("hardware.standaloneManagement").waitForExistence(timeout: 5))
+                XCTAssertTrue(element("action.hardware.connect").exists)
+                XCTAssertFalse(element("hardware.linkFromKeys").exists)
             }
 
             app.navigationBars.buttons.element(boundBy: 0).tap()

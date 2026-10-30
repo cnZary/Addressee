@@ -2,58 +2,53 @@ import SwiftUI
 
 struct HardwareKeyManagementView: View {
     @ObservedObject var model: OpenPgpApplicationModel
+    @AppStorage(HardwareConnectionSettings.multipleHardwareKeysStorageKey)
+    private var allowsMultipleHardwareKeys = false
+    @State private var connection = CardConnectionSelection()
+    @State private var information: CardInformationFfi?
 
     var body: some View {
         Form {
-            if model.cardRegistrations.isEmpty {
-                Section {
-                    Label("hardware.noLinkedDevices", systemImage: "creditcard")
-                    Text("hardware.linkFromKeys")
-                        .accessibilityIdentifier("hardware.linkFromKeys")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+            Section("hardware.devices") {
+                Text("hardware.standaloneManagement")
+                    .accessibilityIdentifier("hardware.standaloneManagement")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                CardConnectionPicker(
+                    model: model,
+                    selection: $connection,
+                    identifier: "hardware.management"
+                )
+                Button("hardware.inspect") {
+                    Task { await inspect() }
                 }
-            } else {
-                Section("hardware.devices") {
-                    ForEach(model.cardRegistrations, id: \.certificateFingerprint) { registration in
-                        NavigationLink {
-                            CardDeviceManagementView(model: model, registration: registration)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(registration.identity.displayIdentifier)
-                                Text(certificateName(registration.certificateFingerprint))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .accessibilityIdentifier("navigation.hardware.device.\(registration.certificateFingerprint)")
-                    }
-                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canInspect)
+                .accessibilityIdentifier("action.hardware.connect")
+            }
 
-                Section("hardware.linkedCertificates") {
-                    ForEach(model.cardRegistrations, id: \.certificateFingerprint) { registration in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(certificateName(registration.certificateFingerprint))
-                            Label("hardware.linkedReady", systemImage: "checkmark.circle")
-                                .font(.footnote)
+            if let information {
+                Section("hardware.detectedDevice") {
+                    NavigationLink {
+                        CardDeviceManagementView(
+                            model: model,
+                            identity: information.identity,
+                            information: information,
+                            connection: connection
+                        )
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(information.identity.displayIdentifier)
+                            Text("hardware.manageDetected")
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
-                            ForEach(registration.components, id: \.componentFingerprint) { component in
-                                LabeledContent {
-                                    Text(component.componentFingerprint)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                } label: {
-                                    Text(component.slot.title)
-                                }
-                            }
                         }
-                        .padding(.vertical, 4)
                     }
+                    .accessibilityIdentifier("navigation.hardware.device.\(information.identity.displayIdentifier)")
                 }
             }
 
             Section("hardware.currentLimitations") {
-                Text("hardware.managementPending")
                 Text("hardware.validationPending")
             }
 
@@ -71,9 +66,18 @@ struct HardwareKeyManagementView: View {
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("screen.more.hardware")
+        .onChange(of: connection) { _ in information = nil }
     }
 
-    private func certificateName(_ fingerprint: String) -> String {
-        model.keys.first { $0.fingerprint == fingerprint }?.displayName ?? fingerprint
+    private var canInspect: Bool {
+        !model.isBusy
+            && connection.isComplete(allowsMultipleHardwareKeys: allowsMultipleHardwareKeys)
+            && (connection.method != .nfc || CardTransportFactory.nfcIsAvailable())
+    }
+
+    private func inspect() async {
+        do {
+            information = try await model.inspectHardware(connection: connection)
+        } catch {}
     }
 }

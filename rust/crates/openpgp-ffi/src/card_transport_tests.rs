@@ -156,7 +156,7 @@ fn initial_identity_mismatch_is_typed_and_never_requests_pin() {
 
     assert!(matches!(
         fixture.connect(expected),
-        Err(AddresseeError::ConflictingCertificate)
+        Err(AddresseeError::CardRegistrationConflict)
     ));
     assert!(fixture.pins.requests().is_empty());
     assert!(fixture.touches.requests().is_empty());
@@ -173,7 +173,7 @@ fn wrong_public_material_rejects_registration_before_pin_or_private_operation() 
 
     assert!(matches!(
         fixture.connect(IDENTITY),
-        Err(AddresseeError::ConflictingCertificate)
+        Err(AddresseeError::CardRegistrationConflict)
     ));
     assert!(fixture.pins.requests().is_empty());
     assert!(fixture.touches.requests().is_empty());

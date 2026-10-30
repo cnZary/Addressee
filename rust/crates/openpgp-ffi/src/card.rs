@@ -517,7 +517,7 @@ pub(crate) fn map_card_error(error: RemoteKeyError) -> AddresseeError {
         | RemoteKeyError::SlotBinding(_)
         | RemoteKeyError::MissingSlotData(_)
         | RemoteKeyError::PublicMaterial(_)
-        | RemoteKeyError::Rpgp(_) => AddresseeError::ConflictingCertificate,
+        | RemoteKeyError::Rpgp(_) => AddresseeError::CardRegistrationConflict,
         RemoteKeyError::UnsupportedKeyVersion(_)
         | RemoteKeyError::UnsupportedAlgorithm { .. }
         | RemoteKeyError::UnsupportedPublicKey(_)

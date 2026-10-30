@@ -212,29 +212,128 @@ final class AppleSmartCardDeviceTests: XCTestCase {
         #endif
     }
 
+    func testUSBStandaloneManagementReadOnly() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["ADDRESSEE_CARD_USB_TESTS"] == "1" else {
+            throw XCTSkip("Standalone USB management requires an explicit fixture and opt-in")
+        }
+        #if targetEnvironment(simulator)
+        throw XCTSkip("This test requires a physical iOS device and an OpenPGP card")
+        #else
+        let fixture = try Self.cardFixture(environment: environment, key: "ADDRESSEE_CARD_USB_FIXTURE")
+        guard let readerName = environment["ADDRESSEE_CARD_READER_NAME"],
+              !readerName.isEmpty, readerName.count <= 1_024 else {
+            throw CardDeviceTestError.invalidTestConfiguration
+        }
+        let readers = try await CardTransportFactory().readerNames()
+        guard readers == [readerName] else {
+            XCTFail("The unique USB reader does not match the explicitly selected test reader")
+            return
+        }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CardUsbManagementTests-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let interaction = CardInteractionCoordinator()
+        let engine = OpenPgpEngine()
+        let observation = CardTransportObservation()
+        let store = CardBindingStore(directory: directory)
+        let manager = CardSessionManager(
+            engine: engine,
+            interaction: interaction,
+            transports: ObservedCardTransportOpening(observation: observation),
+            store: store
+        )
+        let model = OpenPgpApplicationModel(
+            engine: engine,
+            cardInteraction: interaction,
+            cardSessions: manager
+        )
+        await model.load()
+        XCTAssertNil(model.errorMessage)
+        let imported = try await model.importPublic(fixture.publicCertificate)
+        XCTAssertEqual(imported.summary.storage, .publicOnly)
+        XCTAssertTrue(model.cardRegistrations.isEmpty)
+
+        let information = try await model.inspectHardware(
+            connection: CardConnectionSelection(method: .usb, readerName: readerName)
+        )
+        XCTAssertEqual(information.identity, fixture.identity.ffi())
+        XCTAssertEqual(information.slots.count, 3)
+        let localFingerprints = Set(model.keys.flatMap { certificate in
+            [certificate.fingerprint] + certificate.subkeys.map(\.fingerprint)
+        })
+        let cardFingerprints = Set(information.slots.compactMap(\.fingerprint))
+        let matchingComponents = cardFingerprints.intersection(localFingerprints).sorted()
+        let registered = try await Task.detached(priority: .userInitiated) {
+            try engine.cardRegistrations()
+        }.value
+        XCTAssertTrue(registered.isEmpty)
+        XCTAssertTrue(model.cardRegistrations.isEmpty)
+        let storedBindings = try await store.bindings()
+        XCTAssertTrue(storedBindings.isEmpty)
+        let observed = await observation.snapshot()
+        XCTAssertEqual(observed.opened, 1)
+        XCTAssertEqual(observed.closed, 1)
+        XCTAssertEqual(observed.successfulCloses, 1)
+        XCTAssertEqual(observed.failures, 0)
+        let report: [String: Any] = [
+            "schemaVersion": 1,
+            "transport": "usb",
+            "operation": "management",
+            "readerName": readerName,
+            "certificateFingerprint": imported.summary.fingerprint,
+            "cardIdentity": information.identity.displayIdentifier,
+            "matchingPublicComponents": matchingComponents,
+            "associationRequired": false,
+            "associationCreated": false,
+            "privateKeyProviderAttached": false,
+            "publicInspection": "passed",
+            "transportOpenCount": observed.opened,
+            "transportCloseCompletionCount": observed.closed,
+            "successfulTransportCloseCompletionCount": observed.successfulCloses,
+            "transportFailureCount": observed.failures,
+            "pinSupplied": false,
+            "privateKeyOperationRequested": false,
+            "cardConfigurationWritten": false,
+            "privateKeyExportRequested": false,
+        ]
+        let attachment = XCTAttachment(
+            data: try JSONSerialization.data(withJSONObject: report, options: [.sortedKeys]),
+            uniformTypeIdentifier: "public.json"
+        )
+        attachment.name = "usb-management-result.json"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        #endif
+    }
+
     private enum USBPrivateKeyWorkflow {
         case signing
         case attachedSigning
+        case cleartextSigning
         case decryption
 
         var operationName: String {
             switch self {
             case .signing: "signing"
             case .attachedSigning: "attached-signing"
+            case .cleartextSigning: "cleartext-signing"
             case .decryption: "decryption"
             }
         }
 
         var privateKeyOperation: PrivateKeyOperation {
             switch self {
-            case .signing, .attachedSigning: .signing
+            case .signing, .attachedSigning, .cleartextSigning: .signing
             case .decryption: .decryption
             }
         }
 
         func componentFingerprint(in fixture: CardDeviceFixture) throws -> String {
             switch self {
-            case .signing, .attachedSigning:
+            case .signing, .attachedSigning, .cleartextSigning:
                 try XCTUnwrap(fixture.signingComponent)
             case .decryption:
                 try XCTUnwrap(fixture.decryptionComponent)
@@ -248,6 +347,10 @@ final class AppleSmartCardDeviceTests: XCTestCase {
 
     func testUSBPrivateKeyAttachedSigning() async throws {
         try await runUSBPrivateKeyTest(workflow: .attachedSigning)
+    }
+
+    func testUSBPrivateKeyCleartextSigning() async throws {
+        try await runUSBPrivateKeyTest(workflow: .cleartextSigning)
     }
 
     func testUSBPrivateKeyDecryption() async throws {
@@ -328,8 +431,8 @@ final class AppleSmartCardDeviceTests: XCTestCase {
         XCTAssertEqual(observed.successfulCloses, 1)
         XCTAssertEqual(observed.failures, 0)
 
-        let publicInformation = try await model.inspectCard(
-            fingerprint: fingerprint,
+        let publicInformation = try await model.inspectHardware(
+            identity: registration.identity,
             connection: connection
         )
         XCTAssertEqual(publicInformation.identity, registration.identity)
@@ -446,6 +549,52 @@ final class AppleSmartCardDeviceTests: XCTestCase {
                 ("usb-attached-signing-tampered.pgp", tampered),
             ] {
                 let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.data")
+                attachment.name = name
+                attachment.lifetime = .keepAlways
+                add(attachment)
+            }
+        case .cleartextSigning:
+            let text = "Physical USB cleartext signing\r\nSecond line\r\n"
+            let signature = try await Self.respondToCardInteractions(
+                interaction: restoredInteraction,
+                pin: pin
+            ) {
+                try await restored.signCleartext(
+                    signingKey: fingerprint,
+                    password: "",
+                    atUnixSeconds: at,
+                    text: text,
+                    connection: connection
+                )
+            }
+            XCTAssertEqual(signature.metadata.signerFingerprint, componentFingerprint)
+            let message = String(decoding: signature.artifact, as: UTF8.self)
+            XCTAssertTrue(message.hasPrefix("-----BEGIN PGP SIGNED MESSAGE-----\n"))
+            XCTAssertTrue(message.contains("Physical USB cleartext signing\r\nSecond line\r\n"))
+            let verification = try await restored.verifyCleartext(
+                input: signature.artifact,
+                atUnixSeconds: at
+            )
+            XCTAssertEqual(verification.outcome.status, .valid)
+            XCTAssertEqual(verification.outcome.signatures.first?.signerFingerprint, componentFingerprint)
+            XCTAssertEqual(verification.text, text)
+
+            let tamperedMessage = message.replacingOccurrences(
+                of: "Physical USB cleartext signing",
+                with: "Physical USB Cleartext signing"
+            )
+            XCTAssertNotEqual(tamperedMessage, message)
+            let tampered = Data(tamperedMessage.utf8)
+            let rejected = try await restored.verifyCleartext(input: tampered, atUnixSeconds: at)
+            XCTAssertEqual(rejected.outcome.status, .invalid)
+            XCTAssertNil(rejected.text)
+
+            for (name, data) in [
+                ("usb-cleartext-signing-payload.txt", Data(text.utf8)),
+                ("usb-cleartext-signing-message.asc", signature.artifact),
+                ("usb-cleartext-signing-tampered.asc", tampered),
+            ] {
+                let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.text")
                 attachment.name = name
                 attachment.lifetime = .keepAlways
                 add(attachment)
@@ -599,7 +748,10 @@ final class AppleSmartCardDeviceTests: XCTestCase {
         XCTAssertEqual(observed.successfulCloses, 1)
         XCTAssertEqual(observed.failures, 0)
 
-        let publicInformation = try await model.inspectCard(fingerprint: fingerprint)
+        let publicInformation = try await model.inspectHardware(
+            identity: registration.identity,
+            connection: CardConnectionSelection()
+        )
         XCTAssertEqual(publicInformation.identity, registration.identity)
         XCTAssertEqual(model.cardRegistrations, [registration])
         observed = await observation.snapshot()

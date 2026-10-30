@@ -19,8 +19,8 @@ if [[ "$CARD_READER_NAME" == *$'\n'* || "$CARD_READER_NAME" == *$'\r'* ]]; then
 fi
 CARD_USB_OPERATION="${CARD_USB_OPERATION:-association}"
 case "$CARD_USB_OPERATION" in
-    association) ;;
-    signing|attached-signing|decryption)
+    association|management) ;;
+    signing|attached-signing|cleartext-signing|decryption)
         python3 - <<'PY'
 import os
 if not 0 < len(os.environ.get("CARD_TEST_PIN", "").encode()) <= 128:
@@ -28,7 +28,7 @@ if not 0 < len(os.environ.get("CARD_TEST_PIN", "").encode()) <= 128:
 PY
         ;;
     *)
-        echo "CARD_USB_OPERATION must be association, signing, attached-signing, or decryption." >&2
+        echo "CARD_USB_OPERATION must be association, management, signing, attached-signing, cleartext-signing, or decryption." >&2
         exit 2
         ;;
 esac
@@ -130,17 +130,23 @@ done
 plutil -replace AddresseeTests.CommandLineArguments -json '[]' "$TEST_RUN"
 TEST_ID='AppleSmartCardDeviceTests/testUSBAssociationAndCleanClose()'
 case "$CARD_USB_OPERATION" in
+    management)
+        TEST_ID='AppleSmartCardDeviceTests/testUSBStandaloneManagementReadOnly()'
+        ;;
     signing)
         TEST_ID='AppleSmartCardDeviceTests/testUSBPrivateKeySigning()'
         ;;
     attached-signing)
         TEST_ID='AppleSmartCardDeviceTests/testUSBPrivateKeyAttachedSigning()'
         ;;
+    cleartext-signing)
+        TEST_ID='AppleSmartCardDeviceTests/testUSBPrivateKeyCleartextSigning()'
+        ;;
     decryption)
         TEST_ID='AppleSmartCardDeviceTests/testUSBPrivateKeyDecryption()'
         ;;
 esac
-if [[ "$CARD_USB_OPERATION" != association ]]; then
+if [[ "$CARD_USB_OPERATION" != association && "$CARD_USB_OPERATION" != management ]]; then
     for target in EnvironmentVariables TestingEnvironmentVariables; do
         plutil -replace "AddresseeTests.$target.ADDRESSEE_CARD_USB_PRIVATE_KEY_TESTS" -string 1 "$TEST_RUN"
     done
@@ -237,6 +243,20 @@ if operation == "association":
         "privateKeyOperationRequested": False,
         "privateKeyExportRequested": False,
     }
+elif operation == "management":
+    expected = {
+        "operation": operation,
+        "associationRequired": False,
+        "associationCreated": False,
+        "privateKeyProviderAttached": False,
+        "publicInspection": "passed",
+        "transportOpenCount": 1,
+        "transportCloseCompletionCount": 1,
+        "successfulTransportCloseCompletionCount": 1,
+        "pinSupplied": False,
+        "privateKeyOperationRequested": False,
+        "privateKeyExportRequested": False,
+    }
 else:
     expected = {
         "operation": operation,
@@ -264,10 +284,18 @@ for key, value in expected.items():
 for key in ("certificateFingerprint", "cardIdentity"):
     if not isinstance(report.get(key), str) or not report[key]:
         raise SystemExit(f"Missing USB observation: {key}")
-if operation != "association" and (
+if operation not in ("association", "management") and (
     not isinstance(report.get("componentFingerprint"), str) or not report["componentFingerprint"]
 ):
     raise SystemExit("The selected USB component fingerprint is missing")
+if operation == "management":
+    matches = report.get("matchingPublicComponents")
+    if not isinstance(matches, list) or any(
+        not isinstance(value, str) or len(value) != 40
+        or any(character not in "0123456789ABCDEF" for character in value)
+        for value in matches
+    ):
+        raise SystemExit("The standalone management public-key matches are invalid")
 shutil.copyfile(source, output / f"usb-{operation}-result.json")
 
 def export_attachment(prefix, name, maximum):
@@ -298,6 +326,12 @@ if operation == "attached-signing":
     export_attachment("usb-attached-signing-tampered_0_", "tampered-attached-message.pgp", 16 * 1024 * 1024)
     if payload.read_bytes() != b"Physical USB attached signing\0\r\nSecond line":
         raise SystemExit("The exported USB attached-signature payload does not match the test input")
+if operation == "cleartext-signing":
+    payload = export_attachment("usb-cleartext-signing-payload_0_", "payload.txt", 1024 * 1024)
+    export_attachment("usb-cleartext-signing-message_0_", "cleartext-message.asc", 16 * 1024 * 1024)
+    export_attachment("usb-cleartext-signing-tampered_0_", "tampered-cleartext-message.asc", 16 * 1024 * 1024)
+    if payload.read_bytes() != b"Physical USB cleartext signing\r\nSecond line\r\n":
+        raise SystemExit("The exported USB cleartext-signature payload does not match the test input")
 if peer_input == "gpg":
     for argument, name in ((6, "gpg-peer-encrypted.pgp"), (7, "gpg-peer-plaintext.bin")):
         peer_file = Path(sys.argv[argument])
@@ -307,10 +341,15 @@ if peer_input == "gpg":
 print(json.dumps(report, indent=2, sort_keys=True))
 if operation == "association":
     print("Only USB association and clean closure passed; no private-key operation was tested.")
+elif operation == "management":
+    print("Only standalone USB management and clean closure passed; no association or private-key operation was used.")
 else:
     print(f"Only the selected USB {operation} workflow and its public setup and closure passed.")
 PY
 
 if [[ "$CARD_USB_OPERATION" == attached-signing ]]; then
     python3 "$ROOT_DIR/scripts/verify-usb-attached-signature.py" "$CARD_USB_FIXTURE" "$OUTPUT"
+fi
+if [[ "$CARD_USB_OPERATION" == cleartext-signing ]]; then
+    python3 "$ROOT_DIR/scripts/verify-usb-cleartext-signature.py" "$CARD_USB_FIXTURE" "$OUTPUT"
 fi

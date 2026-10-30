@@ -61,7 +61,7 @@ struct KeyDetailsView: View {
                         }
                     }
                     NavigationLink("keys.hardware.manage") {
-                        CardDeviceManagementView(model: model, registration: registration)
+                        HardwareKeyManagementView(model: model)
                     }
                     .accessibilityIdentifier("navigation.keys.hardware.manage")
                     Button("keys.hardware.unlink") {

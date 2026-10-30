@@ -61,7 +61,7 @@ fn initial_and_later_identity_changes_are_rejected_before_pin_or_write_commands(
             },
             fixture.transport.clone(),
         ),
-        Err(AddresseeError::ConflictingCertificate)
+        Err(AddresseeError::CardRegistrationConflict)
     ));
     assert_read_only(&fixture.transport.commands());
 
@@ -77,7 +77,7 @@ fn initial_and_later_identity_changes_are_rejected_before_pin_or_write_commands(
             String::from_utf8(USER_PIN.to_vec()).unwrap(),
             String::from_utf8(NEW_USER_PIN.to_vec()).unwrap(),
         ),
-        Err(AddresseeError::ConflictingCertificate)
+        Err(AddresseeError::CardRegistrationConflict)
     ));
     assert_read_only(&fixture.transport.commands());
 }
