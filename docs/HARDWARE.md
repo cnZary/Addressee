@@ -128,7 +128,7 @@ The signed application and its provisioning profile did not contain `com.apple.s
 
 The physical result is `build/USBCanoKeyAssociation-20261029.xcresult`, with the exported observation in `build/USBCanoKeyAssociation-20261029-evidence/`. The opted-in test is in `apps/ios/AddresseeTests/AppleSmartCardDeviceTests.swift`; it remains skipped without an explicit fixture and hardware-test opt-in. This single-card result is not a compatibility claim for YubiKey or other OpenPGP cards.
 
-The dedicated runner executes only this read-only USB association test, not the Secure Enclave or NFC tests. It requires an explicit unlocked device, the exact expected unique reader, and a public fixture containing the expected OpenPGP identity and component fingerprints. It does not accept or request a card PIN.
+For this 2026-10-29 validation, the dedicated runner executed only the read-only USB association test, not the Secure Enclave or NFC tests. It required an explicit unlocked device, the exact expected unique reader, and a public fixture containing the expected OpenPGP identity and component fingerprints. That invocation did not accept or request a card PIN. The later explicitly opted-in private-key modes are documented separately below.
 
 The runner also passed the same physical test. Its result is `build/USBCanoKeyAssociationScript-20261029.xcresult`, its validated observation is `build/USBCanoKeyAssociationScript-20261029-evidence/usb-association-result.json`, and its execution log is `build/usb-canokey-association-script-20261029.log`.
 
@@ -139,6 +139,33 @@ CARD_USB_FIXTURE=/path/to/public-card-fixture.json \
 bash scripts/test-usb-card-device.sh
 ```
 
+## Physical USB-C CanoKey revalidation on 2026-10-30
+
+The current signed test host passed `AppleSmartCardDeviceTests/testUSBAssociationAndCleanClose()` on the paired iPhone 15 Pro running iOS 27.2. Before any card APDU, a separate read-only API observation reported exactly one reader, `canokeys.org CanoKey Canary`, with no NFC session and no APDU transmission. Its validated evidence is `build/USBCardReaderProbe-20261030-evidence/probe.json`.
+
+The USB association then required that exact unique reader and matched OpenPGP identity `F1D0-00989ADF` and the existing public P-256 signing and decryption components. The transport opened once, completed one successful close, and recorded no transport failure. The temporary association was removed during cleanup. The test supplied no PIN, requested no private-key operation or export, and wrote no card configuration. The result is `build/USBCardAssociation-20261030.xcresult`, the validated observation is `build/USBCardAssociation-20261030-evidence/usb-association-result.json`, and the execution log is `build/usb-canokey-association-20261030.log`.
+
+Separate explicitly opted-in private-key tests also passed on this identified CanoKey and certificate. `AppleSmartCardDeviceTests/testUSBPrivateKeySigning()` generated a real detached P-256 signature over USB. GnuPG 2.5.24 imported the existing public certificate, verified that exact signing component, and rejected a modified payload. The validated observation and exported artifacts are in `build/USBCardSigningGPG-20261030-evidence/`; `gpg-verification.json` records the independent result and leaves identity trust unestablished.
+
+`AppleSmartCardDeviceTests/testUSBPrivateKeyDecryption()` independently used a message encrypted by GnuPG to the existing P-256 decryption component. The application recovered the session key through the physical USB card and matched the complete expected plaintext. Its validated observation records `messageSource=gpg` in `build/USBCardDecryptionGPGFinal-20261030-evidence/usb-decryption-result.json`; the peer ciphertext and expected test plaintext are preserved alongside it. The final runner validation log is `build/usb-canokey-decryption-gpg-final-20261030.log`. GnuPG used the recipient certificate's algorithm preferences and an isolated keyring with `disable-scdaemon` in `gpg-agent.conf`, so host operations did not access a physical card.
+
+Each final private-key test required the exact unique reader, restored the saved public association without opening hardware, and completed association, public-inspection, and one private-key session: three opens, three successful closes, and no transport failure. The test helper supplied the authorized PIN through the production interaction coordinator; these are not visual PIN-sheet UI tests. No private key was exported, no card configuration was written, and temporary associations were removed. The runner reads the PIN only from its environment, does not pass it as a subprocess argument, and removes it from the temporary test-run configuration on exit. The final scan of 199 generated configuration, log, result, and peer files found no test PIN; its result is `build/usb-private-key-secret-scan-20261030.log`.
+
+The runner defaults to the original read-only association test. The private-key tests require explicit selection and the authorized test PIN:
+
+```bash
+DEVICE_ID=<explicit-unlocked-device> \
+CARD_READER_NAME=<exact-current-reader> \
+CARD_USB_FIXTURE=/path/to/public-card-fixture.json \
+CARD_USB_OPERATION=signing \
+CARD_TEST_PIN=<authorized-test-pin> \
+bash scripts/test-usb-card-device.sh
+```
+
+Use `CARD_USB_OPERATION=decryption` for the separate decryption test. Omitting peer input exercises a local encrypt/decrypt round trip. Supplying both `CARD_USB_GPG_MESSAGE=/path/to/encrypted.pgp` and `CARD_USB_GPG_PLAINTEXT=/path/to/expected.bin` instead requires decryption of the specified independent GnuPG message. The default association-only mode was rerun successfully after these additions; its result is `build/USBCardAssociationRegression-20261030.xcresult`. Without explicit hardware-test opt-in, the association, signing, and decryption tests all skip on the simulator.
+
+These results cover this CanoKey, its existing v4 P-256 components, native USB detached signing, and native USB decryption of an encrypt-only GnuPG message. Combined USB sign-and-encrypt and decrypt-and-verify workflows, other signature containers, management writes, other cards and algorithms, physical Extended Length APDUs, GET RESPONSE continuation, and command chaining remain unverified on this native transport. No YubiKey was selected or accessed.
+
 ## Test gates
 
-Read-only inspection and destructive tests must be separate executables. Credentials must come from hidden interactive input and must never appear in source, process arguments, repository files, or logs. Destructive operations require exact reader, USB, AID, and runtime-authorization matching. The YubiKey exclusion has no fallback or override.
+Read-only inspection and destructive tests must be separate executables. Credentials must come from hidden interactive input or an explicitly supplied test-only environment variable for authorized automation and must never appear in source, process arguments, repository files, or logs. Destructive operations require exact reader, USB, AID, and runtime-authorization matching. The YubiKey exclusion has no fallback or override.
