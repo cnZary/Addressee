@@ -129,6 +129,16 @@ final class CardTransportBridgeTests: XCTestCase {
         XCTAssertEqual(transportFailure.diagnostic.code, -8)
         XCTAssertFalse(ErrorPresenter.message(for: transportFailure).contains(marker))
         #endif
+        XCTAssertFalse(OperationDiagnostics.description(for: failure).contains(marker))
+        XCTAssertFalse(OperationDiagnostics.description(for: NSError(domain: marker, code: -9)).contains(marker))
+        let usbDiagnostics = CardSessionDiagnostics(method: .usb)
+        let diagnostic = try XCTUnwrap(
+            usbDiagnostics.failure(AddresseeError.UnsupportedOperation, stage: .privateKeyOperation)
+                as? CardSessionFailure
+        )
+        let description = OperationDiagnostics.description(for: diagnostic)
+        XCTAssertTrue(description.contains("privateKeyOperation"))
+        XCTAssertTrue(description.contains("usb") || description.contains("USB"))
     }
 
     func testReaderGuidanceIsForwardedWithoutChangingTheTransport() async {

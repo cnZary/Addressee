@@ -98,6 +98,21 @@ struct CardSessionDiagnostic: Equatable, Sendable {
         }
         return lines.joined(separator: "\n")
     }
+
+    var consoleDescription: String {
+        var fields = [
+            "transport=\(method.rawValue)",
+            "stage=\(stage.rawValue)",
+            "kind=\(kind.rawValue)",
+        ]
+        if let domain, let code {
+            fields.append("systemError=\(domain):\(code)")
+        }
+        if let status {
+            fields.append(String(format: "SW=%04X", status))
+        }
+        return fields.joined(separator: " ")
+    }
 }
 
 struct CardSessionFailure: Error {
@@ -187,7 +202,7 @@ final class CardSessionDiagnostics: @unchecked Sendable {
         }
         #endif
         if diagnosticError is APDUError { kind = .invalidResponse }
-        return CardSessionFailure(
+        let failure = CardSessionFailure(
             underlying: error,
             diagnostic: CardSessionDiagnostic(
                 stage: stage,
@@ -198,6 +213,8 @@ final class CardSessionDiagnostics: @unchecked Sendable {
                 status: status
             )
         )
+        OperationDiagnostics.record(failure)
+        return failure
     }
 
     private static func safeDomain(_ domain: String) -> String? {

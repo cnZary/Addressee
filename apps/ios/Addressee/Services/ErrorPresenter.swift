@@ -10,6 +10,9 @@ import CryptoTokenKit
 
 enum ErrorPresenter {
     static func message(for error: Error) -> String {
+        if error is CardSessionFailure == false {
+            OperationDiagnostics.record(error)
+        }
         if let error = error as? CardSessionFailure {
             return message(for: error.underlying) + "\n" + error.diagnostic.presentation
         }

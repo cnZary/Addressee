@@ -316,8 +316,21 @@ fn parse_fingerprints(recipients: Vec<String>) -> Result<Vec<FullFingerprint>, A
         .collect()
 }
 
+fn message_diagnostic(error: &MessageError) -> String {
+    match error {
+        MessageError::OpenPgp(_) => "OpenPGP packet processing failed".to_owned(),
+        MessageError::Io(_) => "message input or output failed".to_owned(),
+        MessageError::Key(openpgp_core::KeyError::OpenPgp(_)) => {
+            "certificate processing failed".to_owned()
+        }
+        MessageError::Key(openpgp_core::KeyError::Io(_)) => "key storage I/O failed".to_owned(),
+        _ => error.to_string(),
+    }
+}
+
 impl From<MessageError> for AddresseeError {
     fn from(error: MessageError) -> Self {
+        eprintln!("[Addressee] message error: {}", message_diagnostic(&error));
         match error {
             MessageError::EmptyRecipients
             | MessageError::EmptyInput
@@ -520,5 +533,29 @@ mod tests {
             encrypted.artifact,
         );
         assert!(matches!(public_only, Err(AddresseeError::PublicKeyOnly)));
+    }
+
+    #[test]
+    fn diagnostics_explain_capability_rejections_and_hide_parser_details() {
+        let capability = MessageError::CapabilityDisabled {
+            algorithm: openpgp_policy::Algorithm::LegacyEd25519,
+            backend: openpgp_policy::Backend::OpenPgpCard,
+            key_version: openpgp_policy::KeyVersion::V4,
+            operation: openpgp_policy::Operation::Sign,
+        };
+        let diagnostic = message_diagnostic(&capability);
+        assert!(diagnostic.contains("LegacyEd25519"));
+        assert!(diagnostic.contains("OpenPgpCard"));
+        assert!(diagnostic.contains("Sign"));
+        assert_eq!(
+            AddresseeError::from(capability),
+            AddresseeError::UnsupportedOperation
+        );
+
+        let marker = "sensitive-provider-text-that-must-not-be-logged";
+        let io = MessageError::Io(std::io::Error::other(marker));
+        assert!(!message_diagnostic(&io).contains(marker));
+        let packet = MessageError::OpenPgp(marker.to_owned().into());
+        assert!(!message_diagnostic(&packet).contains(marker));
     }
 }

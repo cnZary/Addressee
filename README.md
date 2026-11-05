@@ -33,6 +33,8 @@ bash scripts/test.sh
 
 Run `python3 scripts/audit-dependencies.py` for locked license and RustSec checks. `scripts/audit-exceptions.json` documents narrowly scoped, version-bound reviews; it is not a blanket advisory bypass. `scripts/collect-license-texts.py` collects upstream notices for distribution review.
 
+For native debugging, run `bash scripts/build-ios.sh`, then build and run the application from Xcode. Open **View > Debug Area > Activate Console**, select all output, and filter for `[Addressee]` or `CryptographicOperation`. Rust reports the rejected algorithm, backend, key version, operation, or sanitized card-protocol reason. Swift reports the operation stage, connection method, allowlisted system error code, and available APDU status word. These diagnostics do not include PINs, APDU payloads, private keys, plaintext, or arbitrary provider error strings. Physical card operations are never initiated just to obtain a diagnostic log.
+
 Regenerate the checked-in capability registry after changing the policy crate, then run its consistency tests:
 
 ```bash

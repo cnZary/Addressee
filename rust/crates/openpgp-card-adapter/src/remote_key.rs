@@ -375,11 +375,11 @@ impl CardSession {
             Ok(TransactionOutput::Bytes(operation(transaction)?))
         }));
         self.record_failure(&result, state.connector.as_ref());
-        #[cfg(feature = "hardware-test")]
+        #[cfg(any(feature = "hardware-test", feature = "diagnostics"))]
         if let Err(error) = &result {
             eprintln!(
-                "Card {slot:?} operation failed before completion: {}.",
-                hardware_error_category(error)
+                "[Addressee] card {slot:?} operation failed: {}",
+                diagnostic_description(error)
             );
         }
         match result? {
@@ -389,8 +389,8 @@ impl CardSession {
     }
 }
 
-#[cfg(feature = "hardware-test")]
-fn hardware_error_category(error: &RemoteKeyError) -> String {
+/// Produces protocol diagnostics without serializing credentials, APDU payloads, or provider text.
+pub fn diagnostic_description(error: &RemoteKeyError) -> String {
     match error {
         RemoteKeyError::Card(openpgp_card::Error::CardStatus(status)) => {
             format!("card status {status:?}")
@@ -404,20 +404,79 @@ fn hardware_error_category(error: &RemoteKeyError) -> String {
         RemoteKeyError::Card(openpgp_card::Error::NotFound(_)) => "data not found".to_owned(),
         RemoteKeyError::Card(openpgp_card::Error::ParseError(_)) => "data parse error".to_owned(),
         RemoteKeyError::Card(openpgp_card::Error::UnsupportedAlgo(_)) => {
-            "unsupported algorithm".to_owned()
+            "card algorithm attributes are unsupported".to_owned()
         }
         RemoteKeyError::Card(openpgp_card::Error::UnsupportedFeature(_)) => {
-            "unsupported feature".to_owned()
+            "card feature is unsupported".to_owned()
         }
         RemoteKeyError::Card(openpgp_card::Error::InternalError(_)) => {
             "card library internal error".to_owned()
         }
         RemoteKeyError::Card(openpgp_card::Error::Smartcard(_)) => "smartcard I/O error".to_owned(),
-        RemoteKeyError::Pcsc(_) => "PC/SC error".to_owned(),
-        RemoteKeyError::Transport(_) => "transport error".to_owned(),
-        RemoteKeyError::Interaction(_) => "interaction error".to_owned(),
-        RemoteKeyError::SlotBinding(reason) => format!("slot binding: {reason}"),
-        other => format!("{other:?}"),
+        RemoteKeyError::Card(_) => "unspecified card protocol error".to_owned(),
+        RemoteKeyError::Pcsc(error) => match error {
+            PcscError::Pcsc {
+                operation, code, ..
+            } => {
+                format!("PC/SC {operation} failed with code 0x{code:08X}")
+            }
+            PcscError::InvalidCommandLength { actual } | PcscError::ResponseTooShort { actual } => {
+                format!("PC/SC invalid data length {actual}")
+            }
+            PcscError::InvalidResponseLength { reported, capacity } => {
+                format!("PC/SC response length {reported} exceeds buffer {capacity}")
+            }
+            PcscError::UnsupportedProtocol(protocol) => {
+                format!("PC/SC unsupported protocol value {protocol}")
+            }
+            PcscError::UnsupportedPlatform => "PC/SC unsupported platform".to_owned(),
+            PcscError::InvalidReaderList(_)
+            | PcscError::ReaderNotFound(_)
+            | PcscError::AmbiguousReader(_) => "PC/SC reader selection failed".to_owned(),
+            PcscError::ReaderListChanged => "PC/SC reader list changed".to_owned(),
+            PcscError::InvalidReaderName => "PC/SC reader name is invalid".to_owned(),
+            PcscError::InvalidState(reason) => format!("PC/SC invalid state: {reason}"),
+        },
+        RemoteKeyError::Transport(error) => format!("{error}"),
+        RemoteKeyError::Interaction(error) => match error {
+            CardInteractionError::Cancelled => "PIN or touch interaction cancelled".to_owned(),
+            CardInteractionError::Unavailable(_) => {
+                "PIN or touch interaction unavailable".to_owned()
+            }
+            CardInteractionError::Protocol(reason) => format!("PIN protocol error: {reason}"),
+            CardInteractionError::Rejected(code) => format!("PIN entry rejected: {code:?}"),
+            CardInteractionError::InvalidEncoding => "PIN is not valid UTF-8".to_owned(),
+            CardInteractionError::InvalidLength { actual, maximum } => {
+                format!("PIN length {actual} exceeds maximum {maximum}")
+            }
+            CardInteractionError::EmptyPin => "PIN is empty".to_owned(),
+            CardInteractionError::TouchFailed(_) => "touch confirmation failed".to_owned(),
+        },
+        RemoteKeyError::PublicMaterial(_) => "public-key conversion failed".to_owned(),
+        RemoteKeyError::Rpgp(_) => "rPGP rejected the public component".to_owned(),
+        RemoteKeyError::SerialMismatch { .. }
+        | RemoteKeyError::IdentityMismatch
+        | RemoteKeyError::SessionPoisoned
+        | RemoteKeyError::UnsupportedKeyVersion(_)
+        | RemoteKeyError::UnsupportedAlgorithm { .. }
+        | RemoteKeyError::UnsupportedPublicKey(_)
+        | RemoteKeyError::UnsupportedHash(_)
+        | RemoteKeyError::WeakHash(_)
+        | RemoteKeyError::UnsupportedSymmetricAlgorithm(_)
+        | RemoteKeyError::MissingSlotData(_)
+        | RemoteKeyError::SlotBinding(_)
+        | RemoteKeyError::InvalidOperation(_)
+        | RemoteKeyError::InvalidDigestLength { .. }
+        | RemoteKeyError::InvalidCiphertext(_)
+        | RemoteKeyError::MalformedResponse { .. }
+        | RemoteKeyError::InvalidSessionKey(_)
+        | RemoteKeyError::UnsupportedKdf(_)
+        | RemoteKeyError::InvalidKdf(_)
+        | RemoteKeyError::EmptyPin
+        | RemoteKeyError::InvalidPinLength { .. }
+        | RemoteKeyError::PinRetriesUnavailable { .. }
+        | RemoteKeyError::WrongPin { .. }
+        | RemoteKeyError::UnexpectedTransactionResult => error.to_string(),
     }
 }
 
@@ -2470,5 +2529,25 @@ mod tests {
             parse_session_key(Zeroizing::new(vec![0, 0]), EskType::V6),
             Err(RemoteKeyError::InvalidSessionKey(_))
         ));
+    }
+
+    #[test]
+    fn diagnostics_include_algorithm_rejections_without_provider_text() {
+        let diagnostic = diagnostic_description(&RemoteKeyError::UnsupportedAlgorithm {
+            slot: KeyType::Signing,
+            algorithm: PublicKeyAlgorithm::EdDSALegacy,
+        });
+        assert!(diagnostic.contains("EdDSALegacy"));
+        assert!(diagnostic.contains("Signing"));
+
+        let marker = "provider-text-that-must-not-be-logged";
+        for error in [
+            RemoteKeyError::Interaction(CardInteractionError::Unavailable(marker.to_owned())),
+            RemoteKeyError::Interaction(CardInteractionError::TouchFailed(marker.to_owned())),
+            RemoteKeyError::PublicMaterial(marker.to_owned()),
+            RemoteKeyError::Rpgp(marker.to_owned()),
+        ] {
+            assert!(!diagnostic_description(&error).contains(marker));
+        }
     }
 }

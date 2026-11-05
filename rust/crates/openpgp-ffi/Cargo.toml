@@ -9,6 +9,8 @@ publish.workspace = true
 crate-type = ["rlib", "staticlib"]
 
 [features]
+default = ["diagnostics"]
+diagnostics = ["openpgp-card-adapter/diagnostics"]
 gpg-interop-test = ["openpgp-card-adapter/hardware-test"]
 
 [dependencies]

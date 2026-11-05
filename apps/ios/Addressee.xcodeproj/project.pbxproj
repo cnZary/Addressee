@@ -46,6 +46,7 @@
 		ADDEF4000000000000000007 /* OpenPgpApplicationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF4000000000000000008 /* OpenPgpApplicationModel.swift */; };
 		ADDEF4000000000000000009 /* GenerationProfilePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF400000000000000000A /* GenerationProfilePresentation.swift */; };
 		ADDEF400000000000000000B /* ErrorPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF400000000000000000C /* ErrorPresenter.swift */; };
+		ADDEF4000000000000000013 /* OperationDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF4000000000000000014 /* OperationDiagnostics.swift */; };
 		ADDEF400000000000000000D /* FileInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF400000000000000000E /* FileInput.swift */; };
 		ADDEF400000000000000000F /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF4000000000000000010 /* ShareSheet.swift */; };
 		ADDEF4000000000000000011 /* OpenPgpApplicationModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDEF4000000000000000012 /* OpenPgpApplicationModelTests.swift */; };
@@ -140,6 +141,7 @@
 		ADDEF4000000000000000008 /* OpenPgpApplicationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenPgpApplicationModel.swift; sourceTree = "<group>"; };
 		ADDEF400000000000000000A /* GenerationProfilePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationProfilePresentation.swift; sourceTree = "<group>"; };
 		ADDEF400000000000000000C /* ErrorPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorPresenter.swift; sourceTree = "<group>"; };
+		ADDEF4000000000000000014 /* OperationDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationDiagnostics.swift; sourceTree = "<group>"; };
 		ADDEF400000000000000000E /* FileInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileInput.swift; sourceTree = "<group>"; };
 		ADDEF4000000000000000010 /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
 		ADDEF4000000000000000012 /* OpenPgpApplicationModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenPgpApplicationModelTests.swift; sourceTree = "<group>"; };
@@ -313,6 +315,7 @@
 				ADDEF4000000000000000008 /* OpenPgpApplicationModel.swift */,
 				ADDEF400000000000000000A /* GenerationProfilePresentation.swift */,
 				ADDEF400000000000000000C /* ErrorPresenter.swift */,
+				ADDEF4000000000000000014 /* OperationDiagnostics.swift */,
 				ADDEF400000000000000000E /* FileInput.swift */,
 				ADDEF5000000000000000001 /* MessageOperationSupport.swift */,
 				ADDEF6000000000000000001 /* SoftwareKeyPersistence.swift */,
@@ -589,6 +592,7 @@
 				ADDEF4000000000000000007 /* OpenPgpApplicationModel.swift in Sources */,
 				ADDEF4000000000000000009 /* GenerationProfilePresentation.swift in Sources */,
 				ADDEF400000000000000000B /* ErrorPresenter.swift in Sources */,
+				ADDEF4000000000000000013 /* OperationDiagnostics.swift in Sources */,
 				ADDEF400000000000000000D /* FileInput.swift in Sources */,
 				ADDEF400000000000000000F /* ShareSheet.swift in Sources */,
 				ADDEF5000000000000000002 /* MessageOperationSupport.swift in Sources */,

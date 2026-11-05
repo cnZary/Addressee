@@ -506,6 +506,10 @@ fn map_resolver_error(error: ResolverError) -> AddresseeError {
 }
 
 pub(crate) fn map_card_error(error: RemoteKeyError) -> AddresseeError {
+    eprintln!(
+        "[Addressee] card protocol error: {}",
+        openpgp_card_adapter::remote_key::diagnostic_description(&error)
+    );
     match error {
         RemoteKeyError::Interaction(CardInteractionError::Cancelled)
         | RemoteKeyError::Transport(AdapterTransportError::Cancelled) => {
