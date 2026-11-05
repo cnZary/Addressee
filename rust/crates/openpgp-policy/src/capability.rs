@@ -445,8 +445,10 @@ pub(crate) fn independent_interop_passed(
     }
 }
 
-/// Host-CLI evidence from the identified CanoKey P-256 tests on 2026-10-26 and 2026-10-27.
-/// Runtime discovery remains mandatory, and this is not iOS transport evidence.
+/// Identified CanoKey P-256 evidence covers host-CLI subkey operations on
+/// 2026-10-26 and 2026-10-27, and physical iPhone primary-key provisioning and
+/// USB association on 2026-11-05. GnuPG accepted the card-signed primary
+/// certificate. Runtime discovery remains mandatory for every card operation.
 fn tested_card_operations(
     algorithm: Algorithm,
     key_version: KeyVersion,
@@ -458,11 +460,18 @@ fn tested_card_operations(
     match algorithm {
         Algorithm::NistP256Ecdsa => matches!(
             operation,
-            Operation::Sign | Operation::ExportPublic | Operation::UseAsSigningSubkey
+            Operation::Generate
+                | Operation::Sign
+                | Operation::ExportPublic
+                | Operation::UseAsPrimaryKey
+                | Operation::UseAsSigningSubkey
         ),
         Algorithm::NistP256Ecdh => matches!(
             operation,
-            Operation::Decrypt | Operation::ExportPublic | Operation::UseAsEncryptionSubkey
+            Operation::Generate
+                | Operation::Decrypt
+                | Operation::ExportPublic
+                | Operation::UseAsEncryptionSubkey
         ),
         _ => false,
     }

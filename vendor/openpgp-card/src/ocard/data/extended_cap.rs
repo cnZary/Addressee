@@ -5,7 +5,7 @@
 
 use std::convert::TryFrom;
 
-use crate::{Error, ocard::data::ExtendedCapabilities};
+use crate::{ocard::data::ExtendedCapabilities, Error};
 
 impl ExtendedCapabilities {
     /// Secure Messaging supported.

@@ -7,11 +7,9 @@ use std::{convert::TryFrom, string::FromUtf8Error};
 
 use anyhow::{Result, anyhow};
 use openpgp_card::{
-    Card,
-    Error,
+    Card, Error,
     ocard::{
-        KeyType,
-        StatusBytes,
+        KeyType, StatusBytes,
         algorithm::AlgoSimple,
         crypto::CardUploadableKey,
         data::{KeyGenerationTime, Sex},
@@ -19,22 +17,13 @@ use openpgp_card::{
     state::{Admin, Open, Transaction},
 };
 use openpgp_card_rpgp::{
-    CardSlot,
-    UploadableKey,
-    bind_into_certificate,
-    public_key_material_and_fp_to_key,
+    CardSlot, UploadableKey, bind_into_certificate, public_key_material_and_fp_to_key,
     public_key_material_to_key,
 };
 use pgp::{
     composed::{
-        ArmorOptions,
-        Deserializable,
-        DetachedSignature,
-        Message,
-        MessageBuilder,
-        PublicOrSecret,
-        SignedPublicKey,
-        SignedSecretKey,
+        ArmorOptions, Deserializable, DetachedSignature, Message, MessageBuilder, PublicOrSecret,
+        SignedPublicKey, SignedSecretKey,
     },
     crypto::sym::SymmetricKeyAlgorithm,
     packet::PublicSubkey,

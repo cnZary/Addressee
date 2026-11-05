@@ -1504,6 +1504,109 @@ fn legacy_subpackets(key: &pgp::packet::SecretSubkey, at: u64) -> (Vec<Subpacket
     (hashed, unhashed)
 }
 
+#[test]
+fn primary_signing_requires_explicit_key_flags_and_uses_the_primary_private_key() {
+    let (store, generated) = generate(GenerationProfile::nist_p256_v4());
+    let secret = store
+        .rpgp_secret_key(&generated.metadata.fingerprint)
+        .unwrap()
+        .clone();
+    let now = evaluation_time();
+
+    let mut certify_only = secret.clone();
+    certify_only.public_subkeys.clear();
+    certify_only.secret_subkeys.clear();
+    let mut rejected = SoftwareKeyStore::new();
+    rejected
+        .import_private(
+            &certify_only.to_bytes().unwrap(),
+            Some(PASSWORD),
+            PASSWORD,
+            PrivateExportPolicy::Allowed,
+        )
+        .unwrap();
+    assert!(matches!(
+        MessageService::new(&rejected, SecurityPolicy::default()).sign_detached(
+            &generated.metadata.fingerprint,
+            PASSWORD,
+            now,
+            &b"certification is not data signing"[..],
+            Vec::new(),
+            MessageFormat::Binary,
+        ),
+        Err(MessageError::NoUsableKey { .. })
+    ));
+
+    let mut signing = secret;
+    signing.public_subkeys.clear();
+    signing.secret_subkeys.clear();
+    let mut rng = rand::thread_rng();
+    let mut direct =
+        SignatureConfig::from_key(&mut rng, &signing.primary_key, SignatureType::Key).unwrap();
+    let mut flags = pgp::packet::KeyFlags::default();
+    flags.set_certify(true);
+    flags.set_sign(true);
+    direct.hashed_subpackets = vec![
+        Subpacket::regular(SubpacketData::SignatureCreationTime(
+            signing.primary_key.created_at(),
+        ))
+        .unwrap(),
+        Subpacket::regular(SubpacketData::KeyFlags(flags)).unwrap(),
+    ];
+    let signature = direct
+        .sign_key(
+            &signing.primary_key,
+            &Password::from(PASSWORD),
+            signing.primary_key.public_key(),
+        )
+        .unwrap();
+    signing.details.direct_signatures = vec![signature];
+    let mut primary_store = SoftwareKeyStore::new();
+    primary_store
+        .import_private(
+            &signing.to_bytes().unwrap(),
+            Some(PASSWORD),
+            PASSWORD,
+            PrivateExportPolicy::Allowed,
+        )
+        .unwrap();
+    let service = MessageService::new(&primary_store, SecurityPolicy::default());
+    let payload = b"primary key signing is an explicit capability";
+    let metadata = service
+        .sign_detached(
+            &generated.metadata.fingerprint,
+            PASSWORD,
+            now,
+            &payload[..],
+            Vec::new(),
+            MessageFormat::Binary,
+        )
+        .unwrap();
+    assert_eq!(
+        metadata.signer_fingerprint,
+        generated.metadata.primary.fingerprint
+    );
+    let mut signature = Vec::new();
+    service
+        .sign_detached(
+            &generated.metadata.fingerprint,
+            PASSWORD,
+            now,
+            &payload[..],
+            &mut signature,
+            MessageFormat::Binary,
+        )
+        .unwrap();
+    let verified = service
+        .verify_detached(&payload[..], &signature, now)
+        .unwrap();
+    assert_eq!(verified.status, VerificationStatus::Valid);
+    assert_eq!(
+        verified.signatures[0].signer_fingerprint.as_ref(),
+        Some(&generated.metadata.primary.fingerprint)
+    );
+}
+
 fn revoked_certificate(store: &SoftwareKeyStore, fingerprint: &FullFingerprint) -> Vec<u8> {
     let mut secret = store.rpgp_secret_key(fingerprint).unwrap().clone();
     let created = Timestamp::now();

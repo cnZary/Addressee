@@ -80,7 +80,7 @@ struct CardAssociationView: View {
     }
 
     private var signingComponents: [KeyMetadataSummary] {
-        summary.subkeys.filter { $0.keyFlags.sign }
+        ([summary.primary] + summary.subkeys).filter { $0.keyFlags.sign }
     }
 
     private var decryptionComponents: [KeyMetadataSummary] {

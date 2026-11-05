@@ -48,9 +48,10 @@ struct KeyDetailsView: View {
                 }
             }
 
-            if let registration = model.cardRegistrations.first(where: {
+            let registrations = model.cardRegistrations.filter {
                 $0.certificateFingerprint == summary.fingerprint
-            }) {
+            }
+            ForEach(registrations, id: \.identity.displayIdentifier) { registration in
                 Section("keys.hardware") {
                     LabeledContent("card.identity", value: registration.identity.displayIdentifier)
                     ForEach(registration.components, id: \.componentFingerprint) { component in
@@ -65,18 +66,19 @@ struct KeyDetailsView: View {
                     }
                     .accessibilityIdentifier("navigation.keys.hardware.manage")
                     Button("keys.hardware.unlink") {
-                        Task { await unlinkCard() }
+                        Task { await unlinkCard(identity: registration.identity) }
                     }
                     .disabled(model.isBusy)
-                    .accessibilityIdentifier("action.keys.hardware.unlink")
+                    .accessibilityIdentifier("action.keys.hardware.unlink.\(registration.identity.displayIdentifier)")
                     Text("keys.hardware.noCardModification")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-            } else if summary.storage == .publicOnly,
-                      !model.hasSecureEnclaveBinding(fingerprint: summary.fingerprint) {
+            }
+            if summary.storage == .publicOnly,
+               !model.hasSecureEnclaveBinding(fingerprint: summary.fingerprint) {
                 Section("keys.hardware") {
-                    NavigationLink("keys.hardware.link") {
+                    NavigationLink(registrations.isEmpty ? "keys.hardware.link" : "keys.hardware.linkAnother") {
                         CardAssociationView(summary: summary, model: model)
                     }
                     .accessibilityIdentifier("navigation.keys.hardware.link")
@@ -212,9 +214,9 @@ struct KeyDetailsView: View {
         } catch {}
     }
 
-    private func unlinkCard() async {
+    private func unlinkCard(identity: CardIdentityFfi) async {
         do {
-            try await model.disconnectCard(fingerprint: summary.fingerprint)
+            try await model.disconnectCard(fingerprint: summary.fingerprint, identity: identity)
         } catch {}
     }
 

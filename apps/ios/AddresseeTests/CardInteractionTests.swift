@@ -104,6 +104,36 @@ final class CardInteractionTests: XCTestCase {
         XCTAssertNil(coordinator.pinRequest)
     }
 
+    func testPreparedNFCPinAcceptsAnyAssociatedCardOnlyOnce() async throws {
+        let coordinator = CardInteractionCoordinator()
+        defer { coordinator.cancelActiveInteraction() }
+        let operationID = UUID()
+        var secondIdentity = identity
+        secondIdentity.serial ^= 1
+        let preparation = Task {
+            try await coordinator.preparePin(
+                operationID: operationID,
+                slot: .signing,
+                identities: [identity, secondIdentity]
+            )
+        }
+        let pinRequested = await waitUntil { coordinator.pinRequest != nil }
+        XCTAssertTrue(pinRequested)
+        XCTAssertNil(coordinator.pinRequest?.identity)
+        coordinator.pin = "synthetic-nfc-pin"
+        coordinator.submitPin()
+        try await preparation.value
+
+        let callbacks = coordinator.callbacks(for: .preparedNFC(id: operationID, slot: .signing))
+        let pin = try await Task.detached {
+            try callbacks.requestPin(purpose: .signing, identity: secondIdentity)
+        }.value
+        XCTAssertEqual(pin, "synthetic-nfc-pin")
+        XCTAssertThrowsError(try callbacks.requestPin(purpose: .signing, identity: identity)) { error in
+            XCTAssertEqual(error as? CardInteractionErrorFfi, .Unavailable)
+        }
+    }
+
     func testPreparedPinRejectsWrongIdentityAndPurposeWithoutOpeningAnotherPrompt() async throws {
         let coordinator = CardInteractionCoordinator()
         defer { coordinator.cancelActiveInteraction() }

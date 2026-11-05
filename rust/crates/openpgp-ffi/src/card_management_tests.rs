@@ -51,6 +51,25 @@ fn inspection_reads_identity_slots_and_advertised_algorithms_without_private_ope
 }
 
 #[test]
+fn occupied_slots_reject_generation_without_pin_or_writes() {
+    let fixture = Fixture::new();
+    let session = fixture.session(IDENTITY);
+    fixture.transport.clear_commands();
+
+    assert!(matches!(
+        session.generate_p256_key(
+            "Synthetic provisioning <card@example.invalid>".to_owned(),
+            String::from_utf8(USER_PIN.to_vec()).unwrap(),
+            String::from_utf8(ADMIN_PIN.to_vec()).unwrap(),
+            false,
+        ),
+        Err(AddresseeError::CardSlotNotEmpty)
+    ));
+    assert!(commands_with_instruction(&fixture.transport.commands(), 0x20).is_empty());
+    assert_read_only(&fixture.transport.commands());
+}
+
+#[test]
 fn initial_and_later_identity_changes_are_rejected_before_pin_or_write_commands() {
     let fixture = Fixture::new();
     assert!(matches!(

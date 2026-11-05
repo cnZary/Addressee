@@ -9,6 +9,7 @@ struct CardDeviceManagementView: View {
     @State private var showPinChange = false
     @State private var touchSlot = CardSlot.signing
     @State private var showTouchChange = false
+    @State private var showProvisioning = false
 
     init(
         model: OpenPgpApplicationModel,
@@ -125,6 +126,18 @@ struct CardDeviceManagementView: View {
                 }
 
                 Section {
+                    Button("hardware.generateP256") {
+                        showProvisioning = true
+                    }
+                    .disabled(information.userPinRetries < 2 || information.adminPinRetries < 2)
+                    .accessibilityIdentifier("action.hardware.generateP256")
+                } header: {
+                    Text("hardware.keyGeneration")
+                } footer: {
+                    Text("hardware.generationDescription")
+                }
+
+                Section {
                     ForEach(information.slots, id: \.slot) { slot in
                         LabeledContent(slot.slot.title) {
                             Button("hardware.touch.change") {
@@ -176,6 +189,16 @@ struct CardDeviceManagementView: View {
                 ) { self.information = $0 }
             }
         }
+        .sheet(isPresented: $showProvisioning, onDismiss: { information = nil }) {
+            if let information {
+                CardProvisioningView(
+                    model: model,
+                    identity: identity,
+                    information: information,
+                    connection: connection
+                )
+            }
+        }
     }
 
     private var version: String {
@@ -219,6 +242,175 @@ struct CardDeviceManagementView: View {
                 connection: connection
             )
         } catch {}
+    }
+}
+
+private struct CardProvisioningView: View {
+    @ObservedObject var model: OpenPgpApplicationModel
+    let identity: CardIdentityFfi
+    let information: CardInformationFfi
+    let connection: CardConnectionSelection
+    @Environment(\.dismiss) private var dismiss
+    @State private var userID = ""
+    @State private var userPin = ""
+    @State private var adminPin = ""
+    @State private var replaceExisting = false
+    @State private var showReplacementConfirmation = false
+    @State private var showRecoveryNote = false
+    @State private var generated: CardGeneratedCertificateFfi?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    LabeledContent("card.identity", value: identity.displayIdentifier)
+                    Text("hardware.generationRole")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let generated {
+                    Section {
+                        Text(generated.certificateFingerprint)
+                            .font(.caption)
+                            .textSelection(.enabled)
+                            .accessibilityIdentifier("hardware.generation.fingerprint")
+                        Text("hardware.generationImported")
+                        Text("hardware.generationAssociateNext")
+                    } header: {
+                        Text("hardware.generationSucceeded")
+                    }
+                    Section {
+                        Button("hardware.generationDone") { dismiss() }
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("action.hardware.generation.done")
+                    }
+                } else {
+                    Section {
+                        TextField("hardware.generationUserID", text: $userID, axis: .vertical)
+                            .lineLimit(2 ... 4)
+                            .accessibilityIdentifier("field.hardware.generation.userID")
+                    } header: {
+                        Text("hardware.generationIdentity")
+                    } footer: {
+                        Text("hardware.generationUserIDFooter")
+                    }
+
+                    Section {
+                        SecureField("hardware.pin.current", text: $userPin)
+                            .textContentType(.password)
+                            .accessibilityIdentifier("field.hardware.generation.userPin")
+                        SecureField("hardware.pin.admin.current", text: $adminPin)
+                            .textContentType(.password)
+                            .accessibilityIdentifier("field.hardware.generation.adminPin")
+                    } header: {
+                        Text("hardware.generationPINs")
+                    } footer: {
+                        Text("hardware.generationPINsFooter")
+                    }
+
+                    if hasExistingKeys {
+                        Section {
+                            Toggle("hardware.generationReplace", isOn: $replaceExisting)
+                                .accessibilityIdentifier("field.hardware.generation.replace")
+                            Text("hardware.generationReplaceWarning")
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+
+                    Section {
+                        Button(hasExistingKeys ? "hardware.generationReview" : "hardware.generationSubmit") {
+                            if hasExistingKeys {
+                                showReplacementConfirmation = true
+                            } else {
+                                Task { await generate() }
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!canSubmit)
+                        .accessibilityIdentifier("action.hardware.generation.submit")
+                    }
+
+                    if model.isBusy {
+                        ProgressView("hardware.nfc.provisioningInProgress")
+                    }
+                    if let errorMessage = model.errorMessage {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                    if showRecoveryNote {
+                        Text("hardware.generationIncomplete")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
+            .disabled(model.isBusy)
+            .dismissKeyboard()
+            .navigationTitle("hardware.generateP256")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("card.interaction.cancel") { dismiss() }
+                        .accessibilityIdentifier("action.hardware.generation.cancel")
+                }
+            }
+            .interactiveDismissDisabled(model.isBusy)
+            .alert("hardware.generationReplaceTitle", isPresented: $showReplacementConfirmation) {
+                Button("hardware.generationReplaceAction", role: .destructive) {
+                    Task { await generate() }
+                }
+                .accessibilityIdentifier("action.hardware.generation.confirm")
+                Button("card.interaction.cancel", role: .cancel) {}
+            } message: {
+                Text("hardware.generationReplaceWarning")
+            }
+        }
+        .onDisappear(perform: clearSecrets)
+    }
+
+    private var hasExistingKeys: Bool {
+        information.slots.contains { slot in
+            guard slot.slot == .signing || slot.slot == .decryption else { return false }
+            return slot.keyPresent != false || slot.fingerprint != nil || slot.createdAt != nil
+        }
+    }
+
+    private var canSubmit: Bool {
+        let userLength = userPin.utf8.count
+        let adminLength = adminPin.utf8.count
+        return !model.isBusy
+            && !userID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && userID.utf8.count <= 4_096
+            && userLength >= 6 && userLength <= Int(information.userPinMaxLength)
+            && adminLength >= 8 && adminLength <= Int(information.adminPinMaxLength)
+            && (!hasExistingKeys || replaceExisting)
+    }
+
+    private func generate() async {
+        showRecoveryNote = false
+        do {
+            let certificate = try await model.generateHardwareP256(
+                identity: identity,
+                userID: userID,
+                userPin: userPin,
+                adminPin: adminPin,
+                replaceExisting: replaceExisting,
+                connection: connection
+            )
+            clearSecrets()
+            generated = certificate
+        } catch {
+            clearSecrets()
+            showRecoveryNote = true
+        }
+    }
+
+    private func clearSecrets() {
+        userPin = ""
+        adminPin = ""
     }
 }
 

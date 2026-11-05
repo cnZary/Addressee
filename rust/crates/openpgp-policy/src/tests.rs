@@ -632,9 +632,12 @@ fn hardware_backends_are_non_exportable_and_secure_enclave_is_narrow() {
 fn physical_card_evidence_is_limited_to_executed_p256_operations() {
     let registry = CapabilityRegistry::baseline();
     for (algorithm, operation) in [
+        (Algorithm::NistP256Ecdsa, Operation::Generate),
         (Algorithm::NistP256Ecdsa, Operation::Sign),
         (Algorithm::NistP256Ecdsa, Operation::ExportPublic),
+        (Algorithm::NistP256Ecdsa, Operation::UseAsPrimaryKey),
         (Algorithm::NistP256Ecdsa, Operation::UseAsSigningSubkey),
+        (Algorithm::NistP256Ecdh, Operation::Generate),
         (Algorithm::NistP256Ecdh, Operation::Decrypt),
         (Algorithm::NistP256Ecdh, Operation::ExportPublic),
         (Algorithm::NistP256Ecdh, Operation::UseAsEncryptionSubkey),
@@ -674,11 +677,8 @@ fn physical_card_evidence_is_limited_to_executed_p256_operations() {
         let entry = registry
             .entry(algorithm, Backend::OpenPgpCard, KeyVersion::V4)
             .unwrap();
-        for operation in [
-            Operation::Generate,
-            Operation::Import,
-            Operation::UseAsPrimaryKey,
-        ] {
+        {
+            let operation = Operation::Import;
             let evidence = entry.evidence(operation).unwrap();
             if evidence.library_claim == LibraryClaim::RuntimeDiscoveryRequired {
                 assert_eq!(

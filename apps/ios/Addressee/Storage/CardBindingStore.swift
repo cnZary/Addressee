@@ -131,11 +131,12 @@ actor CardBindingStore {
         try binding.validate()
         guard !manifest.bindings.contains(where: {
             $0.certificateFingerprint == binding.certificateFingerprint
+                && $0.identity == binding.identity
         }) else {
             throw CardBindingStoreError.conflict
         }
         manifest.bindings.append(binding)
-        manifest.bindings.sort { $0.certificateFingerprint < $1.certificateFingerprint }
+        manifest.bindings.sort(by: cardBindingPrecedes)
         try save(manifest)
     }
 
@@ -153,9 +154,26 @@ actor CardBindingStore {
         try save(manifest)
     }
 
+    func remove(certificateFingerprint: String, identity: CardIdentityFfi) throws {
+        guard isCardFingerprint(certificateFingerprint) else {
+            throw CardBindingStoreError.invalidManifest
+        }
+        let identity = CardIdentityRecord(identity)
+        var manifest = try current()
+        guard manifest.bindings.contains(where: {
+            $0.certificateFingerprint == certificateFingerprint && $0.identity == identity
+        }) else {
+            throw CardBindingStoreError.notFound
+        }
+        manifest.bindings.removeAll {
+            $0.certificateFingerprint == certificateFingerprint && $0.identity == identity
+        }
+        try save(manifest)
+    }
+
     func replaceAll(_ bindings: [CardBinding]) throws {
         var manifest = Manifest(formatVersion: 1, bindings: bindings)
-        manifest.bindings.sort { $0.certificateFingerprint < $1.certificateFingerprint }
+        manifest.bindings.sort(by: cardBindingPrecedes)
         try save(manifest)
     }
 
@@ -227,15 +245,31 @@ actor CardBindingStore {
     }
 
     private func validate(_ manifest: Manifest) throws {
+        let associationKeys = manifest.bindings.map {
+            "\($0.certificateFingerprint):\($0.identity.manufacturer):\($0.identity.serial):\($0.identity.version)"
+        }
         guard manifest.formatVersion == 1,
               manifest.bindings.count <= Self.maximumBindings,
-              Set(manifest.bindings.map(\.certificateFingerprint)).count == manifest.bindings.count else {
+              Set(associationKeys).count == manifest.bindings.count else {
             throw CardBindingStoreError.invalidManifest
         }
         for binding in manifest.bindings {
             try binding.validate()
         }
     }
+}
+
+private func cardBindingPrecedes(_ lhs: CardBinding, _ rhs: CardBinding) -> Bool {
+    if lhs.certificateFingerprint != rhs.certificateFingerprint {
+        return lhs.certificateFingerprint < rhs.certificateFingerprint
+    }
+    if lhs.identity.manufacturer != rhs.identity.manufacturer {
+        return lhs.identity.manufacturer < rhs.identity.manufacturer
+    }
+    if lhs.identity.serial != rhs.identity.serial {
+        return lhs.identity.serial < rhs.identity.serial
+    }
+    return lhs.identity.version < rhs.identity.version
 }
 
 private func isCardFingerprint(_ value: String) -> Bool {

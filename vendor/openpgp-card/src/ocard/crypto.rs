@@ -6,12 +6,12 @@
 //! data for signing.
 
 use crate::{
-    Error,
     ocard::{
         algorithm::AlgorithmAttributes,
         data::{Fingerprint, KeyGenerationTime},
         oid,
     },
+    Error,
 };
 
 #[derive(Debug)]

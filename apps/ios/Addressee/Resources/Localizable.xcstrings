@@ -387,6 +387,22 @@
         }
       }
     },
+    "card.pin.anyAssociatedCard" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use any security key already associated with this certificate."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可使用已与此证书关联的任意一张安全密钥。"
+          }
+        }
+      }
+    },
     "card.pin.field" : {
       "localizations" : {
         "en" : {
@@ -1390,6 +1406,23 @@
         }
       }
     },
+    "error.cardProvisioningIncomplete" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The card did not produce a fully validated certificate. Inspect the card before retrying; generated keys may already have changed."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "卡片未生成完整且有效的证书。请先重新检查卡片；卡内密钥可能已经改变。"
+          }
+        }
+      }
+    },
     "error.cardReaderRequired" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1430,13 +1463,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The card identity or its key slots do not match this certificate association, or a conflicting card session already exists."
+            "value" : "The connected card is not associated with this certificate, its key slots do not match, or a conflicting card session already exists."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "卡片身份或其密钥槽位与此证书的关联不匹配，或已存在冲突的卡片会话。"
+            "value" : "当前卡片未与此证书关联、其密钥槽位不匹配，或已存在冲突的卡片会话。"
           }
         }
       }
@@ -1454,6 +1487,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "所需的卡片会话未连接。"
+          }
+        }
+      }
+    },
+    "error.cardSlotNotEmpty" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The signing or decryption slot is occupied. No key was replaced. Review the existing keys and explicitly authorize replacement if appropriate."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "签名或解密槽位已有密钥，本次未替换任何密钥。请检查现有密钥，并在确认后明确授权替换。"
           }
         }
       }
@@ -2101,6 +2151,22 @@
         }
       }
     },
+    "generation.secureEnclave.fullHardwareValidationPending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Full-hardware certificate generation has not yet passed physical-device validation."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全硬件证书生成尚未通过实体设备验证。"
+          }
+        }
+      }
+    },
     "generation.secureEnclave.nonExportable" : {
       "localizations" : {
         "en" : {
@@ -2422,6 +2488,22 @@
         }
       }
     },
+    "hardware.detectedDevice" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detected Card"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检测到的卡片"
+          }
+        }
+      }
+    },
     "hardware.device.identity" : {
       "localizations" : {
         "en" : {
@@ -2454,54 +2536,6 @@
         }
       }
     },
-    "hardware.detectedDevice" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Detected Card"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "检测到的卡片"
-          }
-        }
-      }
-    },
-    "hardware.manageDetected" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "View slots and manage this card"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "查看密钥槽位并管理此卡片"
-          }
-        }
-      }
-    },
-    "hardware.standaloneManagement" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Manage the currently connected card without creating or requiring a certificate association."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "直接管理当前连接的卡片，无需创建或依赖证书关联。"
-          }
-        }
-      }
-    },
     "hardware.devices" : {
       "localizations" : {
         "en" : {
@@ -2514,6 +2548,310 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "安全密钥"
+          }
+        }
+      }
+    },
+    "hardware.generateP256" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generate P-256 keys"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "生成 P-256 密钥"
+          }
+        }
+      }
+    },
+    "hardware.generationAssociateNext" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To use the card, open this certificate in Keys and explicitly associate it. USB and NFC can be selected for each operation."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要使用卡片，请在“密钥”中打开此证书并明确关联。每次操作均可选择 USB 或 NFC。"
+          }
+        }
+      }
+    },
+    "hardware.generationDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creates a v4 ECDSA primary key in SIG and an ECDH subkey in DEC. The card is checked for P-256 support before any write. No other algorithm is enabled."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 SIG 槽位生成 v4 ECDSA 主钥，在 DEC 槽位生成 ECDH 子钥。写入前会验证卡片是否支持 P-256，不开放其他算法。"
+          }
+        }
+      }
+    },
+    "hardware.generationDone" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成"
+          }
+        }
+      }
+    },
+    "hardware.generationIdentity" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Certificate User ID"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "证书用户标识"
+          }
+        }
+      }
+    },
+    "hardware.generationImported" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The complete public certificate was validated and imported. No private key was exported and no card association was created."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完整公钥证书已通过校验并导入。没有导出私钥，也没有创建卡片关联。"
+          }
+        }
+      }
+    },
+    "hardware.generationIncomplete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The operation may have changed the card. Inspect its slots before retrying. No new card association was created."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本次操作可能已更改卡片。重试前请检查槽位。未创建新的卡片关联。"
+          }
+        }
+      }
+    },
+    "hardware.generationPINs" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Card authorization"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "卡片授权"
+          }
+        }
+      }
+    },
+    "hardware.generationPINsFooter" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter both PINs before connecting. They are used only for this operation and are not stored."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在连接前输入两个 PIN。它们仅用于本次操作，不会被保存。"
+          }
+        }
+      }
+    },
+    "hardware.generationReplace" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replace SIG and DEC keys"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "替换 SIG 和 DEC 密钥"
+          }
+        }
+      }
+    },
+    "hardware.generationReplaceAction" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replace and generate"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "替换并生成"
+          }
+        }
+      }
+    },
+    "hardware.generationReplaceTitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Replace card keys?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "替换卡内密钥？"
+          }
+        }
+      }
+    },
+    "hardware.generationReplaceWarning" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This permanently replaces the signing and decryption keys on the identified card. Existing certificates and associations for those keys will stop matching. AUT is not changed. If interrupted, inspect the card before retrying."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这会永久替换已识别卡片上的签名和解密密钥，旧证书及旧关联将不再匹配。AUT 槽位不会改变。如操作中断，重试前请检查卡片。"
+          }
+        }
+      }
+    },
+    "hardware.generationReview" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review and generate"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "确认并生成"
+          }
+        }
+      }
+    },
+    "hardware.generationRole" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "v4 · P-256 ECDSA primary in SIG · P-256 ECDH subkey in DEC"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "v4 · SIG 中的 P-256 ECDSA 主钥 · DEC 中的 P-256 ECDH 子钥"
+          }
+        }
+      }
+    },
+    "hardware.generationSubmit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generate P-256 on card"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在卡内生成 P-256"
+          }
+        }
+      }
+    },
+    "hardware.generationSucceeded" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "P-256 keys generated"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "P-256 密钥已生成"
+          }
+        }
+      }
+    },
+    "hardware.generationUserID" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "User ID (Name <email>)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用户标识（姓名 <邮箱>）"
+          }
+        }
+      }
+    },
+    "hardware.generationUserIDFooter" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The User ID is embedded in the public certificate. It does not prove ownership of the name or address."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用户标识将写入公钥证书，但不证明对应姓名或地址的归属。"
           }
         }
       }
@@ -2632,6 +2970,22 @@
         }
       }
     },
+    "hardware.keyGeneration" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Card key generation"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "卡内密钥生成"
+          }
+        }
+      }
+    },
     "hardware.keyPresence" : {
       "localizations" : {
         "en" : {
@@ -2697,6 +3051,7 @@
       }
     },
     "hardware.linkedCertificates" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2713,6 +3068,7 @@
       }
     },
     "hardware.linkedReady" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2729,6 +3085,7 @@
       }
     },
     "hardware.linkFromKeys" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2776,18 +3133,34 @@
         }
       }
     },
-    "hardware.managementPending" : {
+    "hardware.manageDetected" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Card key generation, key import, algorithm reconfiguration, and factory reset are not implemented."
+            "value" : "View slots and manage this card"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "卡内密钥生成、导入、算法重配置和恢复出厂设置尚未实现。"
+            "value" : "查看密钥槽位并管理此卡片"
+          }
+        }
+      }
+    },
+    "hardware.managementPending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Card private-key import, arbitrary algorithm reconfiguration, and factory reset are not implemented. P-256 generation is limited to the verified SIG/DEC profile."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "卡内私钥导入、任意算法重配置和恢复出厂设置尚未实现。P-256 生成仅限已验证的 SIG/DEC 配置。"
           }
         }
       }
@@ -2920,6 +3293,54 @@
         }
       }
     },
+    "hardware.nfc.provisioningAlert" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold the card in place to generate P-256 keys. The PINs have already been collected. Do not remove the card until the reader closes."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请保持卡片贴近以生成 P-256 密钥。PIN 已预先收集，在读取窗口关闭前请勿移开卡片。"
+          }
+        }
+      }
+    },
+    "hardware.nfc.provisioningComplete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Card key generation and certificate validation finished."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "卡内密钥生成及证书校验已完成。"
+          }
+        }
+      }
+    },
+    "hardware.nfc.provisioningInProgress" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Generating and validating card keys. Do not remove the card."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在生成并校验卡内密钥，请勿移开卡片。"
+          }
+        }
+      }
+    },
     "hardware.nfc.reading" : {
       "localizations" : {
         "en" : {
@@ -2969,6 +3390,7 @@
       }
     },
     "hardware.noLinkedDevices" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3444,6 +3866,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "密钥槽位"
+          }
+        }
+      }
+    },
+    "hardware.standaloneManagement" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manage the currently connected card without creating or requiring a certificate association."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "直接管理当前连接的卡片，无需创建或依赖证书关联。"
           }
         }
       }
@@ -4308,13 +4746,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Link a security key containing the private components of this certificate. NFC and USB associations both reconnect on demand."
+            "value" : "Link one or more security keys containing the same private components. NFC and USB associations reconnect on demand."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "关联包含此证书私钥组件的安全密钥。通过 NFC 或 USB 关联后，都会按需重新连接。"
+            "value" : "可关联一张或多张包含相同私钥组件的安全密钥。通过 NFC 或 USB 关联后，都会按需重新连接。"
           }
         }
       }
@@ -4331,6 +4769,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "关联安全密钥"
+          }
+        }
+      }
+    },
+    "keys.hardware.linkAnother" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link Another Security Key"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关联另一张安全密钥"
           }
         }
       }
@@ -5441,22 +5895,6 @@
         }
       }
     },
-    "generation.secureEnclave.fullHardwareValidationPending" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Full-hardware certificate generation has not yet passed physical-device validation."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全硬件证书生成尚未通过实体设备验证。"
-          }
-        }
-      }
-    },
     "security.enclave.validationPending" : {
       "localizations" : {
         "en" : {
@@ -6388,6 +6826,7 @@
       }
     },
     "verification.policy.legacyCipherRejected" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6403,7 +6842,12 @@
         }
       }
     },
+    "verification.policy.legacyCipherRejected %@" : {
+      "comment" : "A warning that a message is not verified because it uses a legacy symmetric cipher. The argument is the name of the cipher algorithm.",
+      "isCommentAutoGenerated" : true
+    },
     "verification.policy.legacyCipherWarning" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6418,6 +6862,10 @@
           }
         }
       }
+    },
+    "verification.policy.legacyCipherWarning %@" : {
+      "comment" : "A warning that a message is being verified using a legacy symmetric cipher. The argument is the name of the cipher algorithm.",
+      "isCommentAutoGenerated" : true
     },
     "verification.policy.rejected" : {
       "localizations" : {
@@ -6484,6 +6932,7 @@
       }
     },
     "verification.policy.weakHashRejected" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6499,7 +6948,12 @@
         }
       }
     },
+    "verification.policy.weakHashRejected %@" : {
+      "comment" : "A warning that a message is rejected because it has a weak hash. The argument is the hash algorithm.",
+      "isCommentAutoGenerated" : true
+    },
     "verification.policy.weakHashWarning" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6514,6 +6968,10 @@
           }
         }
       }
+    },
+    "verification.policy.weakHashWarning %@" : {
+      "comment" : "A warning message that indicates a message's signature is not verified because the algorithm used is considered weak. The argument is the name of the algorithm.",
+      "isCommentAutoGenerated" : true
     },
     "verification.result" : {
       "localizations" : {

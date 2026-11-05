@@ -11,8 +11,8 @@ use std::{
 use nom::{combinator, number::complete as number, sequence};
 
 use crate::{
-    Error,
     ocard::data::{KeyGenerationTime, KeySet},
+    Error,
 };
 
 impl From<&KeyGenerationTime> for SystemTime {

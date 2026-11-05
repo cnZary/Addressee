@@ -6,8 +6,8 @@
 use std::convert::TryFrom;
 
 use crate::{
-    Error,
     ocard::data::{CardCapabilities, CardServiceData, HistoricalBytes},
+    Error,
 };
 
 impl CardCapabilities {

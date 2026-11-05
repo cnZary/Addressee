@@ -118,7 +118,11 @@ struct CardPinEntryView: View {
             Form {
                 Section {
                     Label(request.purpose.title, systemImage: "creditcard")
-                    LabeledContent("card.identity", value: request.identity.displayIdentifier)
+                    if let identity = request.identity {
+                        LabeledContent("card.identity", value: identity.displayIdentifier)
+                    } else {
+                        Text("card.pin.anyAssociatedCard")
+                    }
                     Text("card.pin.noStorage")
                         .font(.footnote)
                         .foregroundStyle(.secondary)

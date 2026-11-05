@@ -12,8 +12,8 @@
 use std::{convert::TryFrom, fmt};
 
 use crate::{
+    ocard::{crypto::EccType, keys, oid, KeyType, Transaction},
     Error,
-    ocard::{KeyType, Transaction, crypto::EccType, keys, oid},
 };
 
 /// A shorthand way to specify algorithms (e.g. for key generation).

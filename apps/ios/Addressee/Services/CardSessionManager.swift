@@ -7,7 +7,7 @@ struct CardSessionOpenRequest: Sendable {
     let decryptionComponent: String?
     let method: CardConnectionMethod
     let readerName: String?
-    let expectedIdentity: CardIdentityFfi?
+    let candidateRegistrations: [CardRegistrationFfi]?
     let alertMessage: String
     let interactionMode: CardInteractionMode
 }
@@ -21,11 +21,37 @@ struct OpenedCardSession: Sendable {
     var describeFailure: (@Sendable (Error, CardOperationStage) -> Error)?
 }
 
+enum CardManagementPurpose: Sendable, Equatable {
+    case inspection
+    case p256Provisioning
+
+    var alertMessage: String {
+        switch self {
+        case .inspection: String(localized: "hardware.nfc.managementAlert")
+        case .p256Provisioning: String(localized: "hardware.nfc.provisioningAlert")
+        }
+    }
+
+    var progressMessage: String {
+        switch self {
+        case .inspection: String(localized: "hardware.nfc.managementInProgress")
+        case .p256Provisioning: String(localized: "hardware.nfc.provisioningInProgress")
+        }
+    }
+
+    var successMessage: String {
+        switch self {
+        case .inspection: String(localized: "hardware.nfc.managementComplete")
+        case .p256Provisioning: String(localized: "hardware.nfc.provisioningComplete")
+        }
+    }
+}
+
 struct CardManagementOpenRequest: Sendable {
     let method: CardConnectionMethod
     let readerName: String?
     let expectedIdentity: CardIdentityFfi?
-    let alertMessage: String
+    let purpose: CardManagementPurpose
 }
 
 struct OpenedCardManagementSession: Sendable {
@@ -51,6 +77,7 @@ protocol CardSessionManaging: AnyObject, Sendable {
         readerName: String?
     ) async throws -> CardRegistrationFfi
     func disconnect(certificateFingerprint: String) async throws
+    func disconnect(certificateFingerprint: String, identity: CardIdentityFfi) async throws
     func withCardSession<T: Sendable>(
         certificateFingerprint: String,
         operation: PrivateKeyOperation,
@@ -60,6 +87,7 @@ protocol CardSessionManaging: AnyObject, Sendable {
     func withUnboundCardManagementSession<T: Sendable>(
         expectedIdentity: CardIdentityFfi?,
         connection: CardConnectionSelection,
+        purpose: CardManagementPurpose,
         operation: @escaping @Sendable (OpenPgpCardManagementSession) async throws -> T
     ) async throws -> T
 }
@@ -79,7 +107,8 @@ final class CardSessionManager: CardSessionManaging {
     private let releaseCard: @Sendable (String) async throws -> Void
     private let detachCard: @Sendable (String) async throws -> Void
     private let publicOnlyFingerprints: @Sendable () async throws -> Set<String>
-    private var bindings: [String: CardBinding] = [:]
+    private var bindings: [String: [CardBinding]] = [:]
+    private var reservedBindings: [String: CardBinding] = [:]
     private var didRestore = false
     private var isTransitioning = false
 
@@ -160,14 +189,27 @@ final class CardSessionManager: CardSessionManaging {
                         format: .binary
                     )
                     let identity = try readCardIdentity(transport: bridge)
-                    if let expected = request.expectedIdentity, identity != expected {
-                        throw AddresseeError.CardRegistrationConflict
+                    var signingComponent = request.signingComponent
+                    var decryptionComponent = request.decryptionComponent
+                    if let candidates = request.candidateRegistrations {
+                        guard let selected = candidates.first(where: {
+                            $0.certificateFingerprint == request.certificateFingerprint
+                                && $0.identity == identity
+                        }) else {
+                            throw AddresseeError.CardRegistrationConflict
+                        }
+                        signingComponent = selected.components.first(where: {
+                            $0.slot == .signing
+                        })?.componentFingerprint
+                        decryptionComponent = selected.components.first(where: {
+                            $0.slot == .decryption
+                        })?.componentFingerprint
                     }
                     return try OpenPgpCardSession.connect(
                         identity: identity,
                         publicCertificate: publicCertificate,
-                        signingComponent: request.signingComponent,
-                        decryptionComponent: request.decryptionComponent,
+                        signingComponent: signingComponent,
+                        decryptionComponent: decryptionComponent,
                         transport: bridge,
                         pinProvider: callbacks,
                         touchPrompt: callbacks
@@ -219,7 +261,7 @@ final class CardSessionManager: CardSessionManaging {
                 opened = try await transports.connect(
                     method: request.method,
                     readerName: request.readerName,
-                    alertMessage: request.alertMessage
+                    alertMessage: request.purpose.alertMessage
                 )
             } catch {
                 throw diagnostics.failure(error, stage: .connecting)
@@ -271,10 +313,12 @@ final class CardSessionManager: CardSessionManaging {
         if valid != stored {
             try await store.replaceAll(valid)
         }
-        for binding in valid {
+        let restored = Dictionary(grouping: valid, by: \.certificateFingerprint)
+        for certificateFingerprint in restored.keys.sorted() {
+            guard let binding = restored[certificateFingerprint]?.first else { continue }
             try await ensureReserved(binding)
         }
-        bindings = Dictionary(uniqueKeysWithValues: valid.map { ($0.certificateFingerprint, $0) })
+        bindings = restored
         didRestore = true
         publish()
     }
@@ -297,9 +341,7 @@ final class CardSessionManager: CardSessionManaging {
         try await restore()
         try beginTransition()
         defer { isTransitioning = false }
-        guard bindings[certificateFingerprint] == nil else {
-            throw AddresseeError.CardRegistrationConflict
-        }
+        let previousReservation = reservedBindings[certificateFingerprint]
         let selection = CardConnectionSelection(method: method, readerName: readerName)
         try selection.validate()
         try await ensureDetached(certificateFingerprint: certificateFingerprint)
@@ -309,12 +351,11 @@ final class CardSessionManager: CardSessionManaging {
             decryptionComponent: decryptionComponent,
             method: method,
             readerName: selection.readerName,
-            expectedIdentity: nil,
+            candidateRegistrations: nil,
             alertMessage: String(localized: "hardware.nfc.alert"),
             interactionMode: .interactive
         ))
         var stored: CardBinding?
-        var reserved = false
         do {
             let binding = try CardBinding(registration: opened.registration)
             guard binding.certificateFingerprint == certificateFingerprint else {
@@ -323,27 +364,33 @@ final class CardSessionManager: CardSessionManaging {
             try await store.insert(binding)
             stored = binding
             try await ensureReserved(binding)
-            reserved = true
             try await opened.connection.close(
                 successMessage: String(localized: "hardware.nfc.linked")
             )
-            bindings[certificateFingerprint] = binding
+            bindings[certificateFingerprint, default: []].append(binding)
+            bindings[certificateFingerprint]?.sort {
+                $0.registration.identity.displayIdentifier < $1.registration.identity.displayIdentifier
+            }
             preferences.record(selection, for: certificateFingerprint)
             publish()
             return binding.registration
         } catch {
             interaction.cancelActiveInteraction()
             var cleanupFailed = false
-            if reserved {
-                do {
-                    try await releaseCard(certificateFingerprint)
-                } catch {
-                    cleanupFailed = true
-                }
-            }
             if let stored {
                 do {
-                    try await store.remove(certificateFingerprint: stored.certificateFingerprint)
+                    try await store.remove(
+                        certificateFingerprint: stored.certificateFingerprint,
+                        identity: stored.identity.ffi()
+                    )
+                    if reservedBindings[certificateFingerprint] == stored {
+                        if let previousReservation {
+                            try await ensureReserved(previousReservation)
+                        } else {
+                            try await releaseCard(certificateFingerprint)
+                            reservedBindings.removeValue(forKey: certificateFingerprint)
+                        }
+                    }
                 } catch {
                     cleanupFailed = true
                 }
@@ -362,7 +409,7 @@ final class CardSessionManager: CardSessionManaging {
         try await restore()
         try beginTransition()
         defer { isTransitioning = false }
-        guard let binding = bindings[certificateFingerprint] else {
+        guard let existing = bindings[certificateFingerprint], !existing.isEmpty else {
             throw AddresseeError.CardSessionUnavailable
         }
         interaction.cancelActiveInteraction()
@@ -372,13 +419,51 @@ final class CardSessionManager: CardSessionManaging {
             try await releaseCard(certificateFingerprint)
         } catch {
             do {
-                try await store.insert(binding)
+                for binding in existing {
+                    try await store.insert(binding)
+                }
             } catch {
                 throw AddresseeError.CardSessionUnavailable
             }
             throw error
         }
         bindings.removeValue(forKey: certificateFingerprint)
+        reservedBindings.removeValue(forKey: certificateFingerprint)
+        publish()
+    }
+
+    func disconnect(certificateFingerprint: String, identity: CardIdentityFfi) async throws {
+        try await restore()
+        try beginTransition()
+        defer { isTransitioning = false }
+        guard var remaining = bindings[certificateFingerprint],
+              let binding = remaining.first(where: { $0.identity == CardIdentityRecord(identity) }) else {
+            throw AddresseeError.CardSessionUnavailable
+        }
+        interaction.cancelActiveInteraction()
+        try await ensureDetached(certificateFingerprint: certificateFingerprint)
+        try await store.remove(certificateFingerprint: certificateFingerprint, identity: identity)
+        remaining.removeAll { $0.identity == CardIdentityRecord(identity) }
+        do {
+            if remaining.isEmpty {
+                try await releaseCard(certificateFingerprint)
+                reservedBindings.removeValue(forKey: certificateFingerprint)
+            } else if reservedBindings[certificateFingerprint] == binding {
+                try await ensureReserved(remaining[0])
+            }
+        } catch {
+            do {
+                try await store.insert(binding)
+            } catch {
+                throw AddresseeError.CardSessionUnavailable
+            }
+            throw error
+        }
+        if remaining.isEmpty {
+            bindings.removeValue(forKey: certificateFingerprint)
+        } else {
+            bindings[certificateFingerprint] = remaining
+        }
         publish()
     }
 
@@ -389,7 +474,7 @@ final class CardSessionManager: CardSessionManaging {
         body: @escaping @Sendable () async throws -> T
     ) async throws -> T {
         try await restore()
-        guard let binding = bindings[certificateFingerprint] else {
+        guard let candidates = bindings[certificateFingerprint], !candidates.isEmpty else {
             throw AddresseeError.CardSessionUnavailable
         }
         try connection.validate()
@@ -398,17 +483,17 @@ final class CardSessionManager: CardSessionManaging {
             interaction.cancelActiveInteraction()
             isTransitioning = false
         }
-        try await ensureReserved(binding)
+        try await ensureReserved(reservedBindings[certificateFingerprint] ?? candidates[0])
         try await ensureDetached(certificateFingerprint: certificateFingerprint)
         if connection.method == .nfc {
             let operationID = UUID()
             try await interaction.preparePin(
                 operationID: operationID,
                 slot: operation.cardSlot,
-                identity: binding.identity.ffi()
+                identities: candidates.map { $0.identity.ffi() }
             )
             return try await performAttached(
-                binding: binding,
+                bindings: candidates,
                 selection: connection,
                 interactionMode: .preparedNFC(id: operationID, slot: operation.cardSlot),
                 alertMessage: String(localized: "hardware.nfc.touchPossibleAlert"),
@@ -416,7 +501,7 @@ final class CardSessionManager: CardSessionManaging {
             )
         }
         return try await performAttached(
-            binding: binding,
+            bindings: candidates,
             selection: connection,
             interactionMode: .interactive,
             alertMessage: String(localized: "hardware.nfc.operationAlert"),
@@ -427,6 +512,7 @@ final class CardSessionManager: CardSessionManaging {
     func withUnboundCardManagementSession<T: Sendable>(
         expectedIdentity: CardIdentityFfi?,
         connection: CardConnectionSelection,
+        purpose: CardManagementPurpose = .inspection,
         operation: @escaping @Sendable (OpenPgpCardManagementSession) async throws -> T
     ) async throws -> T {
         try connection.validate()
@@ -442,23 +528,19 @@ final class CardSessionManager: CardSessionManaging {
                 method: connection.method,
                 readerName: connection.readerName,
                 expectedIdentity: expectedIdentity,
-                alertMessage: String(localized: "hardware.nfc.managementAlert")
+                purpose: purpose
             ))
             opened = session
             if let expectedIdentity, session.identity != expectedIdentity {
                 throw AddresseeError.CardRegistrationConflict
             }
             let management = try await session.management()
-            session.connection.updateAlertMessage(
-                String(localized: "hardware.nfc.managementInProgress")
-            )
+            session.connection.updateAlertMessage(purpose.progressMessage)
             let result = try await Task.detached(priority: .userInitiated) {
                 try await operation(management)
             }.value
             finished = true
-            try await session.connection.close(
-                successMessage: String(localized: "hardware.nfc.managementComplete")
-            )
+            try await session.connection.close(successMessage: purpose.successMessage)
             return result
         } catch {
             interaction.cancelActiveInteraction()
@@ -470,7 +552,7 @@ final class CardSessionManager: CardSessionManaging {
     }
 
     private func performAttached<T: Sendable>(
-        binding: CardBinding,
+        bindings: [CardBinding],
         selection: CardConnectionSelection,
         interactionMode: CardInteractionMode,
         alertMessage: String,
@@ -481,14 +563,19 @@ final class CardSessionManager: CardSessionManaging {
         var finished = false
         do {
             let session = try await openSession(openRequest(
-                binding: binding,
+                bindings: bindings,
                 selection: selection,
                 alertMessage: alertMessage,
                 interactionMode: interactionMode
             ))
             opened = session
-            guard session.registration == binding.registration else {
+            guard let binding = bindings.first(where: {
+                $0.registration == session.registration
+            }) else {
                 throw AddresseeError.CardRegistrationConflict
+            }
+            if reservedBindings[binding.certificateFingerprint] != binding {
+                try await ensureReserved(binding)
             }
             let registration = try await session.attach()
             attached = true
@@ -517,18 +604,18 @@ final class CardSessionManager: CardSessionManaging {
     }
 
     private func openRequest(
-        binding: CardBinding,
+        bindings: [CardBinding],
         selection: CardConnectionSelection,
         alertMessage: String,
         interactionMode: CardInteractionMode
     ) -> CardSessionOpenRequest {
         CardSessionOpenRequest(
-            certificateFingerprint: binding.certificateFingerprint,
-            signingComponent: binding.signingComponent,
-            decryptionComponent: binding.decryptionComponent,
+            certificateFingerprint: bindings[0].certificateFingerprint,
+            signingComponent: bindings[0].signingComponent,
+            decryptionComponent: bindings[0].decryptionComponent,
             method: selection.method,
             readerName: selection.readerName,
-            expectedIdentity: binding.identity.ffi(),
+            candidateRegistrations: bindings.map(\.registration),
             alertMessage: alertMessage,
             interactionMode: interactionMode
         )
@@ -564,7 +651,33 @@ final class CardSessionManager: CardSessionManaging {
     }
 
     private func ensureReserved(_ binding: CardBinding) async throws {
-        try await reserveCard(binding.registration)
+        let certificateFingerprint = binding.certificateFingerprint
+        let previous = reservedBindings[certificateFingerprint]
+        guard previous != binding else {
+            try await reserveCard(binding.registration)
+            return
+        }
+        if previous != nil {
+            try await ensureDetached(certificateFingerprint: certificateFingerprint)
+            try await releaseCard(certificateFingerprint)
+            reservedBindings.removeValue(forKey: certificateFingerprint)
+        }
+        do {
+            try await reserveCard(binding.registration)
+            reservedBindings[certificateFingerprint] = binding
+        } catch {
+            let reservationError = error
+            if let previous {
+                do {
+                    try await reserveCard(previous.registration)
+                    reservedBindings[certificateFingerprint] = previous
+                } catch {
+                    reservedBindings.removeValue(forKey: certificateFingerprint)
+                    throw AddresseeError.CardSessionUnavailable
+                }
+            }
+            throw reservationError
+        }
     }
 
     private func beginTransition() throws {
@@ -573,8 +686,11 @@ final class CardSessionManager: CardSessionManaging {
     }
 
     private func publish() {
-        registrations = bindings.values.map(\.registration).sorted {
-            $0.certificateFingerprint < $1.certificateFingerprint
+        registrations = bindings.values.flatMap { $0 }.map(\.registration).sorted {
+            if $0.certificateFingerprint != $1.certificateFingerprint {
+                return $0.certificateFingerprint < $1.certificateFingerprint
+            }
+            return $0.identity.displayIdentifier < $1.identity.displayIdentifier
         }
         onChange?(registrations)
     }

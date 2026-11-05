@@ -3,7 +3,7 @@
 
 use std::convert::{TryFrom, TryInto};
 
-use crate::{Error, ocard::StatusBytes};
+use crate::{ocard::StatusBytes, Error};
 
 /// Response from the card to a command.
 ///

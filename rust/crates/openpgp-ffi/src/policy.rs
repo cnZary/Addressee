@@ -35,6 +35,37 @@ pub fn validate_generation_profile(profile: &GenerationProfile) -> Result<(), Ad
     Ok(())
 }
 
+pub(crate) fn validate_card_p256_generation() -> Result<(), AddresseeError> {
+    for (algorithm, operation) in [
+        (
+            openpgp_policy::Algorithm::NistP256Ecdsa,
+            Operation::Generate,
+        ),
+        (
+            openpgp_policy::Algorithm::NistP256Ecdsa,
+            Operation::UseAsPrimaryKey,
+        ),
+        (openpgp_policy::Algorithm::NistP256Ecdh, Operation::Generate),
+        (
+            openpgp_policy::Algorithm::NistP256Ecdh,
+            Operation::UseAsEncryptionSubkey,
+        ),
+    ] {
+        // Live slot discovery follows before any write. This gate ensures that
+        // implementation and physical evidence exist before authorizing PIN use.
+        if !registry().is_operation_enabled_with_runtime_discovery(
+            algorithm,
+            Backend::OpenPgpCard,
+            KeyVersion::V4,
+            operation,
+            true,
+        ) {
+            return Err(AddresseeError::UnsupportedOperation);
+        }
+    }
+    Ok(())
+}
+
 pub fn validate_certificate_operation(
     certificates: &[CertificateMetadata],
     operation: Operation,

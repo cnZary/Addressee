@@ -5,6 +5,7 @@ mod card_engine;
 mod card_management;
 #[cfg(test)]
 mod card_management_tests;
+mod card_provisioning;
 #[cfg(test)]
 mod card_tests;
 #[cfg(test)]
@@ -24,6 +25,7 @@ mod types;
 
 pub use card::*;
 pub use card_management::*;
+pub use card_provisioning::*;
 pub use engine::OpenPgpEngine;
 pub use error::AddresseeError;
 pub use message_files::*;

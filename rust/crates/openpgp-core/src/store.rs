@@ -413,6 +413,17 @@ impl SoftwareKeyStore {
             .unwrap_or_default())
     }
 
+    pub(crate) fn rpgp_secret_primary(
+        &self,
+        certificate_fingerprint: &FullFingerprint,
+    ) -> Result<Option<&pgp::packet::SecretKey>, KeyError> {
+        Ok(self
+            .record(certificate_fingerprint)?
+            .secret
+            .as_ref()
+            .map(|secret| &secret.primary_key))
+    }
+
     pub(crate) fn rpgp_secret_subkey(
         &self,
         certificate_fingerprint: &FullFingerprint,

@@ -117,13 +117,13 @@ impl KeyOperation {
 
 #[derive(Debug)]
 enum SigningPrivateKey<'a> {
-    Software(&'a SignedSecretSubKey),
+    Software(&'a dyn SigningKey),
     Remote(&'a dyn SigningKey),
 }
 
 pub(crate) struct SigningSelection<'a> {
     pub certificate_fingerprint: FullFingerprint,
-    pub key: &'a SignedPublicSubKey,
+    pub key: &'a dyn KeyDetails,
     private: SigningPrivateKey<'a>,
     remote_resolver: Option<&'a dyn RemotePrivateKeyResolver>,
     remote_failed: Cell<bool>,
@@ -137,7 +137,7 @@ impl std::fmt::Debug for SigningSelection<'_> {
         formatter
             .debug_struct("SigningSelection")
             .field("certificate_fingerprint", &self.certificate_fingerprint)
-            .field("key", &self.key)
+            .field("key_fingerprint", &self.key.fingerprint())
             .field("private", &self.private)
             .field("algorithm", &self.algorithm)
             .field("hash_algorithm", &self.hash_algorithm)
@@ -220,7 +220,7 @@ impl SigningKey for SigningSelection<'_> {
         data: &[u8],
     ) -> pgp::errors::Result<SignatureBytes> {
         match &self.private {
-            SigningPrivateKey::Software(key) => SigningKey::sign(&key.key, key_pw, hash, data),
+            SigningPrivateKey::Software(key) => key.sign(key_pw, hash, data),
             SigningPrivateKey::Remote(key) => {
                 let result = key.sign(key_pw, hash, data);
                 if result.is_err() {
@@ -357,47 +357,63 @@ pub(crate) fn signing_key<'a>(
                     policy_rejection.get_or_insert(rejection);
                     continue;
                 }
-                return signing_selection(service, fingerprint, subkey, secret);
+                return make_signing_selection(
+                    service,
+                    fingerprint,
+                    subkey,
+                    SigningPrivateKey::Software(&secret.key),
+                );
             }
             remote_candidates.push(subkey);
         }
-        let has_public_candidates = !remote_candidates.is_empty();
-        if let Some(resolver) = service.remote_resolver {
-            for subkey in remote_candidates {
-                let component_fingerprint = FullFingerprint::from_rpgp(&subkey.key.fingerprint());
-                let backend = resolver.backend(fingerprint, &component_fingerprint);
-                let runtime_discovered =
-                    resolver.runtime_capabilities_verified(fingerprint, &component_fingerprint);
-                let operation = KeyOperation::for_key(&subkey.key, backend, Operation::Sign)?;
-                if let Some(rejection) = operation.rejection(service, runtime_discovered) {
+        let mut has_public_candidates = !remote_candidates.is_empty();
+        for subkey in remote_candidates {
+            if let Some(selection) = remote_signing_candidate(
+                service,
+                fingerprint,
+                subkey,
+                &subkey.key.fingerprint(),
+                &mut policy_rejection,
+            )? {
+                return Ok(selection);
+            }
+        }
+
+        let primary = &certificate.primary_key;
+        if primary.algorithm().can_sign() && validity.primary.is_valid_for(KeyUsage::Sign) {
+            let primary_fingerprint = primary.fingerprint();
+            if let Some(secret) = service.keys.rpgp_secret_primary(fingerprint)? {
+                let operation =
+                    KeyOperation::for_key(primary, Some(Backend::Software), Operation::Sign)?;
+                let primary_operation = KeyOperation::for_key(
+                    primary,
+                    Some(Backend::Software),
+                    Operation::UseAsPrimaryKey,
+                )?;
+                if let Some(rejection) = operation
+                    .rejection(service, false)
+                    .or_else(|| primary_operation.rejection(service, false))
+                {
                     policy_rejection.get_or_insert(rejection);
-                    continue;
-                }
-                let Some(key) = resolver
-                    .signing_key(fingerprint, &component_fingerprint)
-                    .map_err(|_| {
-                        remote_failure(
-                            fingerprint,
-                            &component_fingerprint,
-                            MessageOperation::Sign,
-                            resolver.failure_kind(
-                                fingerprint,
-                                &component_fingerprint,
-                                MessageOperation::Sign,
-                            ),
-                        )
-                    })?
-                else {
-                    continue;
-                };
-                if !key_details_match(subkey, key) {
-                    return Err(remote_error(
+                } else {
+                    return make_signing_selection(
+                        service,
                         fingerprint,
-                        &component_fingerprint,
-                        MessageOperation::Sign,
-                    ));
+                        primary,
+                        SigningPrivateKey::Software(secret),
+                    );
                 }
-                return remote_signing_selection(service, fingerprint, subkey, key);
+            } else {
+                has_public_candidates = true;
+                if let Some(selection) = remote_signing_candidate(
+                    service,
+                    fingerprint,
+                    primary,
+                    &primary_fingerprint,
+                    &mut policy_rejection,
+                )? {
+                    return Ok(selection);
+                }
             }
         }
         if has_public_candidates
@@ -425,41 +441,69 @@ fn signing_valid(validity: &CertificateValidity, subkey: &SignedPublicSubKey) ->
     })
 }
 
-fn signing_selection<'a>(
+fn remote_signing_candidate<'a>(
     service: &MessageService<'a>,
     certificate_fingerprint: &FullFingerprint,
-    key: &'a SignedPublicSubKey,
-    secret: &'a SignedSecretSubKey,
-) -> Result<SigningSelection<'a>, MessageError> {
+    public: &'a dyn KeyDetails,
+    component_fingerprint: &Fingerprint,
+    policy_rejection: &mut Option<KeyOperation>,
+) -> Result<Option<SigningSelection<'a>>, MessageError> {
+    let Some(resolver) = service.remote_resolver else {
+        return Ok(None);
+    };
+    let component = FullFingerprint::from_rpgp(component_fingerprint);
+    let backend = resolver.backend(certificate_fingerprint, &component);
+    let runtime_discovered =
+        resolver.runtime_capabilities_verified(certificate_fingerprint, &component);
+    let operation = KeyOperation::for_key(public, backend, Operation::Sign)?;
+    let primary_operation = (component.as_str() == certificate_fingerprint.as_str())
+        .then(|| KeyOperation::for_key(public, backend, Operation::UseAsPrimaryKey))
+        .transpose()?;
+    if let Some(rejection) = operation
+        .rejection(service, runtime_discovered)
+        .or_else(|| {
+            primary_operation.and_then(|operation| operation.rejection(service, runtime_discovered))
+        })
+    {
+        policy_rejection.get_or_insert(rejection);
+        return Ok(None);
+    }
+    let Some(remote) = resolver
+        .signing_key(certificate_fingerprint, &component)
+        .map_err(|_| {
+            remote_failure(
+                certificate_fingerprint,
+                &component,
+                MessageOperation::Sign,
+                resolver.failure_kind(certificate_fingerprint, &component, MessageOperation::Sign),
+            )
+        })?
+    else {
+        return Ok(None);
+    };
+    if !key_details_match(public, remote) {
+        return Err(remote_error(
+            certificate_fingerprint,
+            &component,
+            MessageOperation::Sign,
+        ));
+    }
     make_signing_selection(
         service,
         certificate_fingerprint,
-        key,
-        SigningPrivateKey::Software(secret),
-    )
-}
-
-fn remote_signing_selection<'a>(
-    service: &MessageService<'a>,
-    certificate_fingerprint: &FullFingerprint,
-    key: &'a SignedPublicSubKey,
-    remote: &'a dyn SigningKey,
-) -> Result<SigningSelection<'a>, MessageError> {
-    make_signing_selection(
-        service,
-        certificate_fingerprint,
-        key,
+        public,
         SigningPrivateKey::Remote(remote),
     )
+    .map(Some)
 }
 
 fn make_signing_selection<'a>(
     service: &MessageService<'a>,
     certificate_fingerprint: &FullFingerprint,
-    key: &'a SignedPublicSubKey,
+    key: &'a dyn KeyDetails,
     private: SigningPrivateKey<'a>,
 ) -> Result<SigningSelection<'a>, MessageError> {
-    let hash_algorithm = key.key.public_params().hash_alg();
+    let hash_algorithm = key.public_params().hash_alg();
     let policy_hash_algorithm = new_hash_algorithm(hash_algorithm)?;
     service
         .security_policy
@@ -474,7 +518,7 @@ fn make_signing_selection<'a>(
         private,
         remote_resolver,
         remote_failed: Cell::new(false),
-        algorithm: metadata::algorithm_metadata(key.key.algorithm(), key.key.public_params())?,
+        algorithm: metadata::algorithm_metadata(key.algorithm(), key.public_params())?,
         hash_algorithm,
         policy_hash_algorithm,
     })
@@ -592,7 +636,7 @@ pub(crate) fn decryption_keys<'a>(
 
 fn key_details_match<E, A>(expected: &E, actual: &A) -> bool
 where
-    E: KeyDetails,
+    E: KeyDetails + ?Sized,
     A: KeyDetails + ?Sized,
 {
     expected.version() == actual.version()

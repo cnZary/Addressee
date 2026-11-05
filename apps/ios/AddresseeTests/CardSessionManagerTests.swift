@@ -85,7 +85,7 @@ final class CardSessionManagerTests: XCTestCase {
         XCTAssertNotEqual(id, UUID())
         XCTAssertEqual(slot, .signing)
         for request in requests {
-            XCTAssertEqual(request.expectedIdentity, registration.identity)
+            XCTAssertEqual(request.candidateRegistrations, [registration])
             XCTAssertEqual(request.signingComponent, registration.components[0].componentFingerprint)
             XCTAssertEqual(request.decryptionComponent, registration.components[1].componentFingerprint)
         }
@@ -135,7 +135,7 @@ final class CardSessionManagerTests: XCTestCase {
         let request = try await unwrap(await secondSpy.requests.first)
         XCTAssertEqual(request.method, .usb)
         XCTAssertEqual(request.readerName, "Explicit USB Reader")
-        XCTAssertEqual(request.expectedIdentity, registration.identity)
+        XCTAssertEqual(request.candidateRegistrations, [registration])
     }
 
     func testIndependentCertificatesKeepTheirOwnCardsAndConnections() async throws {
@@ -176,10 +176,10 @@ final class CardSessionManagerTests: XCTestCase {
         }
         let firstRequest = try await unwrap(await firstSpy.requests.last)
         let secondRequest = try await unwrap(await secondSpy.requests.last)
-        XCTAssertEqual(firstRequest.expectedIdentity, first.identity)
+        XCTAssertEqual(firstRequest.candidateRegistrations, [first])
         XCTAssertEqual(firstRequest.signingComponent, first.components[0].componentFingerprint)
         XCTAssertEqual(firstRequest.readerName, "Explicit USB Reader")
-        XCTAssertEqual(secondRequest.expectedIdentity, second.identity)
+        XCTAssertEqual(secondRequest.candidateRegistrations, [second])
         XCTAssertEqual(secondRequest.decryptionComponent, second.components[1].componentFingerprint)
         XCTAssertEqual(secondRequest.method, .nfc)
         await assertEqual(await firstSpy.events.map(\.name), ["reserve", "open", "attach", "operate", "detach", "close"])
@@ -202,6 +202,100 @@ final class CardSessionManagerTests: XCTestCase {
         try await assertEqual(try await store.bindings().map(\.certificateFingerprint), [second.certificateFingerprint])
         await assertEqual(await restoredSpy.events.map(\.name), ["reserve", "release"])
         await assertEqual(await restoredSecondSpy.events.map(\.name), ["reserve"])
+    }
+
+    func testSameCertificateSwitchesBetweenAssociatedCardsAndRejectsUnknownCard() async throws {
+        let first = makeRegistration()
+        var second = first
+        second.identity.serial ^= 1
+        let spy = CardSessionSpy(registration: first)
+        let store = CardBindingStore(directory: directory)
+        let manager = makeManager(
+            spy: spy,
+            store: store,
+            publicOnly: [first.certificateFingerprint]
+        )
+        try await link(manager, registration: first, method: .usb)
+        await spy.setNextRegistration(second)
+        try await link(manager, registration: second, method: .usb)
+        XCTAssertEqual(manager.registrations, [first, second])
+        await spy.clearEvents()
+
+        var unknown = second
+        unknown.identity.serial ^= 2
+        await spy.setRegistrationSequence([first, second, unknown])
+        let connection = CardConnectionSelection(method: .usb, readerName: "Explicit USB Reader")
+        for registration in [first, second] {
+            let result = try await manager.withCardSession(
+                certificateFingerprint: first.certificateFingerprint,
+                operation: .signing,
+                connection: connection
+            ) {
+                await spy.operate(registration.identity.displayIdentifier)
+            }
+            XCTAssertEqual(result, registration.identity.displayIdentifier)
+        }
+        do {
+            _ = try await manager.withCardSession(
+                certificateFingerprint: first.certificateFingerprint,
+                operation: .signing,
+                connection: connection
+            ) {
+                await spy.operate("must not run")
+            }
+            XCTFail("An unassociated third card must not reach the private-key operation")
+        } catch {
+            XCTAssertEqual(error as? AddresseeError, .CardRegistrationConflict)
+        }
+
+        let requests = await spy.requests
+        XCTAssertEqual(requests.count, 3)
+        for request in requests {
+            XCTAssertEqual(request.candidateRegistrations, [first, second])
+        }
+        assertOperationEvents(await spy.events, [
+            "reserve", "open", "release", "reserve", "attach", "operate", "detach", "close",
+            "reserve", "open", "release", "reserve", "attach", "operate", "detach", "close",
+            "reserve", "open", "close",
+        ])
+        XCTAssertEqual(manager.registrations, [first, second])
+        try await assertEqual(try await store.bindings().map(\.registration), [first, second])
+        await assertFalse(await spy.isAttached)
+    }
+
+    func testUnlinkingOneCardPreservesTheOtherPersistentAssociation() async throws {
+        let first = makeRegistration()
+        var second = first
+        second.identity.serial ^= 1
+        let store = CardBindingStore(directory: directory)
+        let spy = CardSessionSpy(registration: first)
+        let manager = makeManager(
+            spy: spy,
+            store: store,
+            publicOnly: [first.certificateFingerprint]
+        )
+        try await link(manager, registration: first, method: .usb)
+        await spy.setNextRegistration(second)
+        try await link(manager, registration: second, method: .usb)
+        await spy.clearEvents()
+
+        try await manager.disconnect(
+            certificateFingerprint: first.certificateFingerprint,
+            identity: second.identity
+        )
+        XCTAssertEqual(manager.registrations, [first])
+        try await assertEqual(try await store.bindings().map(\.registration), [first])
+        assertOperationEvents(await spy.events, ["release", "reserve"])
+
+        let restoredSpy = CardSessionSpy(registration: first)
+        let restored = makeManager(
+            spy: restoredSpy,
+            store: store,
+            publicOnly: [first.certificateFingerprint]
+        )
+        try await restored.restore()
+        XCTAssertEqual(restored.registrations, [first])
+        assertOperationEvents(await restoredSpy.events, ["reserve"])
     }
 
     func testCleanupFailureDoesNotReplaceTheOriginalOperationFailure() async throws {
@@ -531,9 +625,37 @@ final class CardSessionManagerTests: XCTestCase {
         let request = try await unwrap(await spy.managementRequests.first)
         XCTAssertEqual(request.method, .nfc)
         XCTAssertNil(request.expectedIdentity)
-        XCTAssertEqual(request.alertMessage, String(localized: "hardware.nfc.managementAlert"))
+        XCTAssertEqual(request.purpose, .inspection)
         await assertEqual(await spy.operationGuidance["inspect"], [
             String(localized: "hardware.nfc.managementInProgress"),
+        ])
+        XCTAssertTrue(manager.registrations.isEmpty)
+        await assertEqual(await spy.requests.count, 0)
+    }
+
+    func testProvisioningUsesItsOwnGuidanceWithoutCreatingAnAssociation() async throws {
+        let registration = makeRegistration()
+        let spy = CardSessionSpy(registration: registration)
+        let manager = makeManager(spy: spy, publicOnly: [])
+
+        let information = try await manager.withUnboundCardManagementSession(
+            expectedIdentity: registration.identity,
+            connection: CardConnectionSelection(),
+            purpose: .p256Provisioning
+        ) { session in
+            await spy.operate("provision")
+            return try session.inspect()
+        }
+        XCTAssertEqual(information.identity, registration.identity)
+        assertOperationEvents(await spy.events, [
+            "open", "management", "operate", "close",
+        ])
+        await assertEqual(await spy.events.last, .close(String(localized: "hardware.nfc.provisioningComplete")))
+        let request = try await unwrap(await spy.managementRequests.first)
+        XCTAssertEqual(request.purpose, .p256Provisioning)
+        XCTAssertEqual(request.purpose.alertMessage, String(localized: "hardware.nfc.provisioningAlert"))
+        await assertEqual(await spy.operationGuidance["provision"], [
+            String(localized: "hardware.nfc.provisioningInProgress"),
         ])
         XCTAssertTrue(manager.registrations.isEmpty)
         await assertEqual(await spy.requests.count, 0)
@@ -668,7 +790,9 @@ final class CardSessionManagerTests: XCTestCase {
             responders.append(Task { @MainActor in
                 while !Task.isCancelled {
                     if let request = interaction.pinRequest {
-                        for spy in spies.values where await spy.handles(request.identity) {
+                        for spy in spies.values {
+                            if let identity = request.identity,
+                               await !spy.handles(identity) { continue }
                             await spy.notePinPrompt()
                         }
                         interaction.pin = "synthetic-test-pin"

@@ -12,15 +12,8 @@ use pgp::composed::{Deserializable, SignedPublicKey};
 use crate::{
     cards::TestConfig,
     util::{
-        TestResult,
-        run_test,
-        test_decrypt,
-        test_keygen,
-        test_print_algo_info,
-        test_print_caps,
-        test_reset,
-        test_set_user_data,
-        test_sign,
+        TestResult, run_test, test_decrypt, test_keygen, test_print_algo_info, test_print_caps,
+        test_reset, test_set_user_data, test_sign,
     },
 };
 

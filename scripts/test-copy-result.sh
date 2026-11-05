@@ -37,6 +37,10 @@ xcodebuild -quiet \
     test
 xcrun xcresulttool get test-results tests --path "$RESULT_BUNDLE"
 
+# A completed test run may shut down its simulator before host clipboard validation.
+xcrun simctl boot "$SIMULATOR_ID" 2>/dev/null || true
+xcrun simctl bootstatus "$SIMULATOR_ID" -b
+
 RUNNER_CONTAINER=$(xcrun simctl get_app_container \
     "$SIMULATOR_ID" com.addressee.AddresseeUITests.xctrunner data)
 EXPECTED="$RUNNER_CONTAINER/tmp/addressee-copy-expectation"

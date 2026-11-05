@@ -12,13 +12,8 @@ use openpgp_card::{
 use pgp::{
     crypto::{ecc_curve::ECCCurve, eddsa_legacy},
     types::{
-        EcdhPublicParams,
-        EcdsaPublicParams,
-        EddsaLegacyPublicParams,
-        KeyDetails,
-        PlainSecretParams,
-        PublicParams,
-        SecretParams,
+        EcdhPublicParams, EcdsaPublicParams, EddsaLegacyPublicParams, KeyDetails,
+        PlainSecretParams, PublicParams, SecretParams,
     },
 };
 use rsa::{

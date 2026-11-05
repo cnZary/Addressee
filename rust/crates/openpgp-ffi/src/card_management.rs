@@ -316,7 +316,15 @@ impl OpenPgpCardManagementSession {
 }
 
 impl OpenPgpCardManagementSession {
-    fn card(&self) -> Result<std::sync::MutexGuard<'_, Card<Open>>, AddresseeError> {
+    pub(crate) fn transport(&self) -> &FfiTransport {
+        &self.transport
+    }
+
+    pub(crate) fn identity(&self) -> CardIdentityFfi {
+        self.identity
+    }
+
+    pub(crate) fn card(&self) -> Result<std::sync::MutexGuard<'_, Card<Open>>, AddresseeError> {
         self.card
             .lock()
             .map_err(|_| AddresseeError::CardSessionUnavailable)
@@ -354,7 +362,7 @@ impl OpenPgpCardManagementSession {
         }
     }
 
-    fn map_error(&self, error: openpgp_card::Error) -> AddresseeError {
+    pub(crate) fn map_error(&self, error: openpgp_card::Error) -> AddresseeError {
         map_management_card_error(&self.transport, error)
     }
 }
@@ -367,7 +375,7 @@ fn map_management_error(transport: &FfiTransport, error: RemoteKeyError) -> Addr
     }
 }
 
-fn map_management_card_error(
+pub(crate) fn map_management_card_error(
     transport: &FfiTransport,
     error: openpgp_card::Error,
 ) -> AddresseeError {

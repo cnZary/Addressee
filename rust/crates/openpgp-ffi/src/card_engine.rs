@@ -33,17 +33,23 @@ impl OpenPgpEngine {
         let mut components = std::collections::BTreeSet::new();
         for binding in &mut registration.components {
             let component = FullFingerprint::from_hex(&binding.component_fingerprint)?;
-            let Some(subkey) = certificate
+            let component_metadata = certificate
                 .subkeys
                 .iter()
                 .find(|subkey| subkey.fingerprint == component)
-            else {
+                .or_else(|| {
+                    (binding.slot == CardSlot::Signing
+                        && certificate.primary.fingerprint == component)
+                        .then_some(&certificate.primary)
+                });
+            let Some(component_metadata) = component_metadata else {
                 return Err(AddresseeError::InvalidCertificate);
             };
             let valid = match binding.slot {
-                CardSlot::Signing => subkey.key_flags.sign,
+                CardSlot::Signing => component_metadata.key_flags.sign,
                 CardSlot::Decryption => {
-                    subkey.key_flags.encrypt_communications || subkey.key_flags.encrypt_storage
+                    component_metadata.key_flags.encrypt_communications
+                        || component_metadata.key_flags.encrypt_storage
                 }
                 CardSlot::Authentication => false,
             };

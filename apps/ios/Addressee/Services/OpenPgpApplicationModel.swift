@@ -27,9 +27,14 @@ final class OpenPgpApplicationModel: ObservableObject {
     @Published private(set) var isBusy = false
     @Published var errorMessage: String?
 
+    typealias HardwareP256Generator = @Sendable (
+        OpenPgpCardManagementSession, String, String, String, Bool
+    ) async throws -> CardGeneratedCertificateFfi
+
     private let engine: OpenPgpEngine
     private let persistence: SoftwareKeyPersistence?
     private let hardwareConnectionSettings: HardwareConnectionSettings
+    private let hardwareP256Generator: HardwareP256Generator
     let cardInteraction: CardInteractionCoordinator
     let cardSessions: any CardSessionManaging
     let secureEnclaveSessions: any SecureEnclaveSessionManaging
@@ -40,11 +45,21 @@ final class OpenPgpApplicationModel: ObservableObject {
         cardInteraction: CardInteractionCoordinator? = nil,
         cardSessions: (any CardSessionManaging)? = nil,
         secureEnclaveSessions: (any SecureEnclaveSessionManaging)? = nil,
-        hardwareConnectionSettings: HardwareConnectionSettings = HardwareConnectionSettings()
+        hardwareConnectionSettings: HardwareConnectionSettings = HardwareConnectionSettings(),
+        hardwareP256Generator: HardwareP256Generator? = nil
     ) {
         self.engine = engine
         self.persistence = persistence
         self.hardwareConnectionSettings = hardwareConnectionSettings
+        self.hardwareP256Generator = hardwareP256Generator ?? {
+            session, userID, userPin, adminPin, replaceExisting in
+            try session.generateP256Key(
+                userId: userID,
+                userPin: userPin,
+                adminPin: adminPin,
+                replaceExisting: replaceExisting
+            )
+        }
         let interaction = cardInteraction ?? CardInteractionCoordinator()
         self.cardInteraction = interaction
         let sessions = cardSessions ?? CardSessionManager(
@@ -180,6 +195,12 @@ final class OpenPgpApplicationModel: ObservableObject {
         }
     }
 
+    func disconnectCard(fingerprint: String, identity: CardIdentityFfi) async throws {
+        try await perform { [cardSessions] in
+            try await cardSessions.disconnect(certificateFingerprint: fingerprint, identity: identity)
+        }
+    }
+
     func preferredCardConnection(for fingerprint: String) -> CardConnectionSelection {
         cardSessions.preferredConnection(for: fingerprint)
     }
@@ -191,7 +212,8 @@ final class OpenPgpApplicationModel: ObservableObject {
         try await perform(refresh: false) { [cardSessions] in
             try await cardSessions.withUnboundCardManagementSession(
                 expectedIdentity: identity,
-                connection: connection
+                connection: connection,
+                purpose: .inspection
             ) { session in
                 try session.inspect()
             }
@@ -208,10 +230,34 @@ final class OpenPgpApplicationModel: ObservableObject {
         try await perform(refresh: false) { [cardSessions] in
             try await cardSessions.withUnboundCardManagementSession(
                 expectedIdentity: identity,
-                connection: connection
+                connection: connection,
+                purpose: .inspection
             ) { session in
                 try session.changePin(kind: kind, current: current, new: new)
                 return try session.inspect()
+            }
+        }
+    }
+
+    func generateHardwareP256(
+        identity: CardIdentityFfi,
+        userID: String,
+        userPin: String,
+        adminPin: String,
+        replaceExisting: Bool,
+        connection: CardConnectionSelection
+    ) async throws -> CardGeneratedCertificateFfi {
+        try await perform { [cardSessions, engine, hardwareP256Generator] in
+            try await cardSessions.withUnboundCardManagementSession(
+                expectedIdentity: identity,
+                connection: connection,
+                purpose: .p256Provisioning
+            ) { session in
+                let generated = try await hardwareP256Generator(
+                    session, userID, userPin, adminPin, replaceExisting
+                )
+                _ = try engine.importPublicKey(input: generated.publicCertificate)
+                return generated
             }
         }
     }
@@ -226,7 +272,8 @@ final class OpenPgpApplicationModel: ObservableObject {
         try await perform(refresh: false) { [cardSessions] in
             try await cardSessions.withUnboundCardManagementSession(
                 expectedIdentity: identity,
-                connection: connection
+                connection: connection,
+                purpose: .inspection
             ) { session in
                 try session.setTouchPolicy(slot: slot, policy: policy, adminPin: adminPin)
                 return try session.inspect()
@@ -515,10 +562,11 @@ extension OpenPgpApplicationModel {
         for key: CertificateSummary,
         component: KeyMetadataSummary
     ) -> LocalizedStringKey {
-        if let registration = cardRegistrations.first(where: {
-            $0.certificateFingerprint == key.fingerprint
-        }), registration.components.contains(where: {
-            $0.componentFingerprint == component.fingerprint
+        if cardRegistrations.contains(where: { registration in
+            registration.certificateFingerprint == key.fingerprint
+                && registration.components.contains(where: {
+                    $0.componentFingerprint == component.fingerprint
+                })
         }) {
             return "keys.protection.smartCard"
         }
@@ -544,13 +592,15 @@ extension OpenPgpApplicationModel {
         slot: CardSlot,
         matching predicate: (KeyMetadataSummary) -> Bool
     ) -> Bool {
-        guard key.storage == .publicOnly,
-              let registration = cardRegistrations.first(where: {
-                  $0.certificateFingerprint == key.fingerprint
-              }) else { return false }
-        return key.subkeys.contains { component in
-            predicate(component) && registration.components.contains {
-                $0.slot == slot && $0.componentFingerprint == component.fingerprint
+        let registrations = cardRegistrations.filter {
+            $0.certificateFingerprint == key.fingerprint
+        }
+        guard key.storage == .publicOnly, !registrations.isEmpty else { return false }
+        return keyComponents(key).contains { component in
+            predicate(component) && registrations.contains { registration in
+                registration.components.contains {
+                    $0.slot == slot && $0.componentFingerprint == component.fingerprint
+                }
             }
         }
     }

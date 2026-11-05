@@ -2,7 +2,7 @@ use openpgp_card::ocard::KeyType;
 use openpgp_core::{Backend, FullFingerprint, RemotePrivateKeyResolver};
 use pgp::{
     composed::SignedPublicKey,
-    types::{DecryptionKey, Fingerprint, KeyDetails as _, SigningKey},
+    types::{DecryptionKey, Fingerprint, KeyDetails, SigningKey},
 };
 use thiserror::Error;
 
@@ -57,20 +57,28 @@ impl CardKeyResolver {
     ) -> Result<FullFingerprint, ResolverError> {
         certificate.verify_bindings()?;
         let certificate_fingerprint = full_fingerprint(&certificate.primary_key.fingerprint())?;
-        let component_key = certificate
-            .public_subkeys
-            .iter()
-            .find(|subkey| {
-                full_fingerprint(&subkey.key.fingerprint())
-                    .is_ok_and(|fingerprint| fingerprint == *component)
-            })
-            .ok_or(ResolverError::ComponentNotFound)?;
+        let component_key: &dyn KeyDetails = if slot == KeyType::Signing
+            && full_fingerprint(&certificate.primary_key.fingerprint())
+                .is_ok_and(|fingerprint| fingerprint == *component)
+        {
+            &certificate.primary_key
+        } else {
+            certificate
+                .public_subkeys
+                .iter()
+                .find(|subkey| {
+                    full_fingerprint(&subkey.key.fingerprint())
+                        .is_ok_and(|fingerprint| fingerprint == *component)
+                })
+                .map(|subkey| &subkey.key as &dyn KeyDetails)
+                .ok_or(ResolverError::ComponentNotFound)?
+        };
         if self.keys.iter().any(|registered| {
             registered.certificate == certificate_fingerprint && registered.component == *component
         }) {
             return Err(ResolverError::DuplicateComponent);
         }
-        let key = self.session.bind(slot, &component_key.key)?;
+        let key = self.session.bind(slot, component_key)?;
         self.keys.push(RegisteredKey {
             certificate: certificate_fingerprint,
             component: component.clone(),

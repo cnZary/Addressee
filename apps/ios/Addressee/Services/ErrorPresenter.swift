@@ -86,6 +86,8 @@ enum ErrorPresenter {
         case .RemoteKeyUnavailable: "error.remoteKeyUnavailable"
         case .CardRegistrationConflict: "error.cardRegistrationConflict"
         case .CardSessionUnavailable: "error.cardSessionUnavailable"
+        case .CardSlotNotEmpty: "error.cardSlotNotEmpty"
+        case .CardProvisioningIncomplete: "error.cardProvisioningIncomplete"
         case .AmbiguousPrivateKeyStorage: "error.ambiguousPrivateKeyStorage"
         case .OperationCancelled: "error.operationCancelled"
         case .InternalFailure: "error.operationFailed"

@@ -39,6 +39,88 @@ fn remote_operations_cover_v4_and_v6_with_public_only_records() {
 }
 
 #[test]
+fn remote_primary_signing_uses_the_registered_primary_component() {
+    let mut fixture = Fixture::new(GenerationProfile::nist_p256_v4());
+    let fingerprint = &fixture.metadata.fingerprint;
+    let mut certificate = fixture
+        .software_store
+        .rpgp_secret_key(fingerprint)
+        .unwrap()
+        .clone();
+    let mut rng = rand::thread_rng();
+    let mut direct =
+        SignatureConfig::from_key(&mut rng, &certificate.primary_key, SignatureType::Key).unwrap();
+    let mut flags = pgp::packet::KeyFlags::default();
+    flags.set_certify(true);
+    flags.set_sign(true);
+    direct.hashed_subpackets = vec![
+        Subpacket::regular(SubpacketData::SignatureCreationTime(
+            certificate.primary_key.created_at(),
+        ))
+        .unwrap(),
+        Subpacket::regular(SubpacketData::KeyFlags(flags)).unwrap(),
+    ];
+    let signature = direct
+        .sign_key(
+            &certificate.primary_key,
+            &Password::from(PASSWORD),
+            certificate.primary_key.public_key(),
+        )
+        .unwrap();
+    certificate.details.direct_signatures = vec![signature];
+    certificate.public_subkeys = vec![certificate.secret_subkeys[1].signed_public_key()];
+    certificate.secret_subkeys.clear();
+    certificate
+        .primary_key
+        .remove_password(&Password::from(PASSWORD))
+        .unwrap();
+    fixture.resolver.signing = TestRemoteKey::new(certificate.primary_key.clone());
+    fixture.resolver.signing_fingerprint = fingerprint.clone();
+    fixture.resolver.backend = Some(Backend::OpenPgpCard);
+    fixture.resolver.runtime_capabilities_verified = true;
+
+    let mut public_store = SoftwareKeyStore::new();
+    public_store
+        .import_public(&public_certificate(&certificate))
+        .unwrap();
+    let metadata = public_store.metadata(fingerprint).unwrap();
+    assert!(metadata.primary.key_flags.sign);
+    assert_eq!(metadata.subkeys.len(), 1);
+    let now = evaluation_time();
+    let service = MessageService::new(&public_store, SecurityPolicy::default())
+        .with_remote_resolver(&fixture.resolver);
+    let payload = b"the card signing slot is also the certificate primary key";
+    let mut signature = Vec::new();
+    let signing = service
+        .sign_detached(
+            fingerprint,
+            PASSWORD,
+            now,
+            &payload[..],
+            &mut signature,
+            MessageFormat::Binary,
+        )
+        .unwrap();
+    assert_eq!(signing.signer_fingerprint, *fingerprint);
+    let verified = service
+        .verify_detached(&payload[..], &signature, now)
+        .unwrap();
+    assert_eq!(verified.status, VerificationStatus::Valid);
+    assert_eq!(
+        verified.signatures[0].signer_fingerprint.as_ref(),
+        Some(fingerprint)
+    );
+    assert_eq!(
+        fixture.resolver.signing_resolutions.borrow().as_slice(),
+        &[(fingerprint.clone(), fingerprint.clone())]
+    );
+    assert_eq!(
+        fixture.resolver.signing.sign_calls.borrow().as_slice(),
+        &[0]
+    );
+}
+
+#[test]
 fn software_keys_keep_their_password_path_with_a_resolver_installed() {
     let fixture = Fixture::new(GenerationProfile::nist_p256_v4());
     let fingerprint = &fixture.metadata.fingerprint;
@@ -777,8 +859,26 @@ impl RemotePrivateKeyResolver for TestResolver {
 }
 
 #[derive(Debug)]
+enum TestPrivateKey {
+    Primary(pgp::packet::SecretKey),
+    Subkey(SecretSubkey),
+}
+
+impl From<pgp::packet::SecretKey> for TestPrivateKey {
+    fn from(key: pgp::packet::SecretKey) -> Self {
+        Self::Primary(key)
+    }
+}
+
+impl From<SecretSubkey> for TestPrivateKey {
+    fn from(key: SecretSubkey) -> Self {
+        Self::Subkey(key)
+    }
+}
+
+#[derive(Debug)]
 struct TestRemoteKey {
-    key: SecretSubkey,
+    key: TestPrivateKey,
     sign_calls: RefCell<Vec<usize>>,
     decrypt_calls: RefCell<Vec<(usize, EskType)>>,
     fail: Cell<bool>,
@@ -786,9 +886,9 @@ struct TestRemoteKey {
 }
 
 impl TestRemoteKey {
-    fn new(key: SecretSubkey) -> Self {
+    fn new(key: impl Into<TestPrivateKey>) -> Self {
         Self {
-            key,
+            key: key.into(),
             sign_calls: RefCell::new(Vec::new()),
             decrypt_calls: RefCell::new(Vec::new()),
             fail: Cell::new(false),
@@ -799,31 +899,52 @@ impl TestRemoteKey {
 
 impl KeyDetails for TestRemoteKey {
     fn version(&self) -> KeyVersion {
-        self.key.version()
+        match &self.key {
+            TestPrivateKey::Primary(key) => key.version(),
+            TestPrivateKey::Subkey(key) => key.version(),
+        }
     }
 
     fn legacy_key_id(&self) -> KeyId {
-        self.key.legacy_key_id()
+        match &self.key {
+            TestPrivateKey::Primary(key) => key.legacy_key_id(),
+            TestPrivateKey::Subkey(key) => key.legacy_key_id(),
+        }
     }
 
     fn fingerprint(&self) -> Fingerprint {
-        self.key.fingerprint()
+        match &self.key {
+            TestPrivateKey::Primary(key) => key.fingerprint(),
+            TestPrivateKey::Subkey(key) => key.fingerprint(),
+        }
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.key.algorithm()
+        match &self.key {
+            TestPrivateKey::Primary(key) => key.algorithm(),
+            TestPrivateKey::Subkey(key) => key.algorithm(),
+        }
     }
 
     fn created_at(&self) -> Timestamp {
-        self.key.created_at()
+        match &self.key {
+            TestPrivateKey::Primary(key) => key.created_at(),
+            TestPrivateKey::Subkey(key) => key.created_at(),
+        }
     }
 
     fn legacy_v3_expiration_days(&self) -> Option<u16> {
-        self.key.legacy_v3_expiration_days()
+        match &self.key {
+            TestPrivateKey::Primary(key) => key.legacy_v3_expiration_days(),
+            TestPrivateKey::Subkey(key) => key.legacy_v3_expiration_days(),
+        }
     }
 
     fn public_params(&self) -> &PublicParams {
-        self.key.public_params()
+        match &self.key {
+            TestPrivateKey::Primary(key) => key.public_params(),
+            TestPrivateKey::Subkey(key) => key.public_params(),
+        }
     }
 }
 
@@ -838,11 +959,14 @@ impl SigningKey for TestRemoteKey {
         if self.fail.get() {
             return Err(PROVIDER_DETAIL.to_owned().into());
         }
-        SigningKey::sign(&self.key, key_pw, hash, data)
+        match &self.key {
+            TestPrivateKey::Primary(key) => SigningKey::sign(key, key_pw, hash, data),
+            TestPrivateKey::Subkey(key) => SigningKey::sign(key, key_pw, hash, data),
+        }
     }
 
     fn hash_alg(&self) -> HashAlgorithm {
-        self.key.public_params().hash_alg()
+        self.public_params().hash_alg()
     }
 }
 
@@ -862,7 +986,10 @@ impl DecryptionKey for TestRemoteKey {
         if self.fail_inner.get() {
             return Ok(Err(PROVIDER_DETAIL.to_owned().into()));
         }
-        DecryptionKey::decrypt(&self.key, key_pw, values, typ)
+        match &self.key {
+            TestPrivateKey::Primary(key) => DecryptionKey::decrypt(key, key_pw, values, typ),
+            TestPrivateKey::Subkey(key) => DecryptionKey::decrypt(key, key_pw, values, typ),
+        }
     }
 }
 

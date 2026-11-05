@@ -8,7 +8,7 @@ use std::convert::TryFrom;
 use crate::ocard::{
     data::{CardholderRelatedData, Lang, Sex},
     tags::Tags,
-    tlv::{Tlv, value::Value},
+    tlv::{value::Value, Tlv},
 };
 
 impl CardholderRelatedData {

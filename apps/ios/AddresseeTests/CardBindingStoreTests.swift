@@ -59,6 +59,26 @@ final class CardBindingStoreTests: XCTestCase {
         try assertPublicManifest(expectedCount: 1)
     }
 
+    func testSameCertificateSupportsMultipleCardsAndIndividualRemoval() async throws {
+        let store = CardBindingStore(directory: directory)
+        let first = try binding(certificate: "A", signing: "1", decryption: "2")
+        var secondRegistration = first.registration
+        secondRegistration.identity.serial ^= 1
+        let second = try CardBinding(registration: secondRegistration)
+        try await store.insert(first)
+        try await store.insert(second)
+
+        let restored = CardBindingStore(directory: directory)
+        try await assertEqual(try await restored.bindings(), [first, second])
+        try await restored.remove(
+            certificateFingerprint: first.certificateFingerprint,
+            identity: first.identity.ffi()
+        )
+        try await assertEqual(try await restored.bindings(), [second])
+        try await restored.remove(certificateFingerprint: second.certificateFingerprint)
+        try await assertEqual(try await restored.bindings(), [])
+    }
+
     func testDuplicateAndInvalidAssociationsAreRejected() async throws {
         let store = CardBindingStore.inMemory()
         let original = try binding(certificate: "A", signing: "1", decryption: "2")

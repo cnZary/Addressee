@@ -35,9 +35,7 @@ use std::fmt::Debug;
 pub use cardslot::CardSlot;
 pub use private::UploadableKey;
 pub use rpgp::{
-    bind_into_certificate,
-    public_key_material_and_fp_to_key,
-    public_key_material_to_key,
+    bind_into_certificate, public_key_material_and_fp_to_key, public_key_material_to_key,
     public_to_fingerprint,
 };
 

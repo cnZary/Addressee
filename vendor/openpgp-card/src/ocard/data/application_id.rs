@@ -7,7 +7,7 @@ use std::convert::TryFrom;
 
 use nom::{bytes::complete as bytes, number::complete as number};
 
-use crate::ocard::data::{ApplicationIdentifier, complete};
+use crate::ocard::data::{complete, ApplicationIdentifier};
 
 fn parse(input: &[u8]) -> nom::IResult<&[u8], ApplicationIdentifier> {
     let (input, _) = bytes::tag([0xd2, 0x76, 0x0, 0x1, 0x24])(input)?;

@@ -3386,10 +3386,10 @@
         {
           "operation": "generate",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
-          "independentInteroperabilityTests": "notRun",
-          "physicalHardwareTests": "notRun"
+          "implementation": "implemented",
+          "unitTests": "passed",
+          "independentInteroperabilityTests": "passed",
+          "physicalHardwareTests": "passed"
         },
         {
           "operation": "import",
@@ -3450,10 +3450,10 @@
         {
           "operation": "useAsPrimaryKey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
-          "independentInteroperabilityTests": "notRun",
-          "physicalHardwareTests": "notRun"
+          "implementation": "implemented",
+          "unitTests": "passed",
+          "independentInteroperabilityTests": "passed",
+          "physicalHardwareTests": "passed"
         },
         {
           "operation": "useAsSigningSubkey",
@@ -3946,10 +3946,10 @@
         {
           "operation": "generate",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
-          "independentInteroperabilityTests": "notRun",
-          "physicalHardwareTests": "notRun"
+          "implementation": "implemented",
+          "unitTests": "passed",
+          "independentInteroperabilityTests": "passed",
+          "physicalHardwareTests": "passed"
         },
         {
           "operation": "import",

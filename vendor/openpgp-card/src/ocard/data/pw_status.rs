@@ -5,7 +5,7 @@
 
 use std::convert::TryFrom;
 
-use crate::{Error, ocard::data::PWStatusBytes};
+use crate::{ocard::data::PWStatusBytes, Error};
 
 impl PWStatusBytes {
     /// PUT DO for PW Status Bytes accepts either 1 or 4 bytes of data.

@@ -20,7 +20,7 @@ fi
 CARD_USB_OPERATION="${CARD_USB_OPERATION:-association}"
 case "$CARD_USB_OPERATION" in
     association|management) ;;
-    signing|attached-signing|cleartext-signing|decryption)
+    signing|multi-card-signing|attached-signing|cleartext-signing|decryption)
         python3 - <<'PY'
 import os
 if not 0 < len(os.environ.get("CARD_TEST_PIN", "").encode()) <= 128:
@@ -28,7 +28,7 @@ if not 0 < len(os.environ.get("CARD_TEST_PIN", "").encode()) <= 128:
 PY
         ;;
     *)
-        echo "CARD_USB_OPERATION must be association, management, signing, attached-signing, cleartext-signing, or decryption." >&2
+        echo "CARD_USB_OPERATION must be association, management, signing, multi-card-signing, attached-signing, cleartext-signing, or decryption." >&2
         exit 2
         ;;
 esac
@@ -107,6 +107,7 @@ print(base64.b64encode(json.dumps(fixture, separators=(",", ":")).encode()).deco
 PY
 )
 
+bash "$ROOT_DIR/scripts/build-ios.sh"
 xcodebuild \
     -project "$ROOT_DIR/apps/ios/Addressee.xcodeproj" \
     -scheme AddresseeSecureEnclave \
@@ -135,6 +136,9 @@ case "$CARD_USB_OPERATION" in
         ;;
     signing)
         TEST_ID='AppleSmartCardDeviceTests/testUSBPrivateKeySigning()'
+        ;;
+    multi-card-signing)
+        TEST_ID='AppleSmartCardDeviceTests/testUSBPrivateKeySigningWithMultipleAssociatedCards()'
         ;;
     attached-signing)
         TEST_ID='AppleSmartCardDeviceTests/testUSBPrivateKeyAttachedSigning()'
@@ -212,7 +216,7 @@ from pathlib import Path
 import shutil
 import sys
 
-output = Path(sys.argv[1])
+output = Path(sys.argv[1]).resolve()
 reader_name = sys.argv[2]
 test_id = sys.argv[3]
 operation = sys.argv[4]
@@ -262,6 +266,8 @@ else:
         "operation": operation,
         "messageSource": peer_input,
         "associationRestored": True,
+        "associatedCardCount": 2 if operation == "multi-card-signing" else 1,
+        "priorCardAssociationSeeded": operation == "multi-card-signing",
         "publicInspection": "passed",
         "privateKeyOperation": "passed",
         "transportOpenCount": 3,
@@ -315,7 +321,7 @@ def export_attachment(prefix, name, maximum):
     shutil.copyfile(artifact, output / name)
     return output / name
 
-if operation == "signing":
+if operation in ("signing", "multi-card-signing"):
     payload = export_attachment("usb-signing-payload_0_", "payload.bin", 1024 * 1024)
     export_attachment("usb-signing-signature_0_", "signature.sig", 1024 * 1024)
     if payload.read_bytes() != b"Physical USB short signing session":

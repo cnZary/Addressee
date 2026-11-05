@@ -22,6 +22,8 @@ pub enum AddresseeError {
     RemoteKeyUnavailable,
     CardRegistrationConflict,
     CardSessionUnavailable,
+    CardSlotNotEmpty,
+    CardProvisioningIncomplete,
     AmbiguousPrivateKeyStorage,
     OperationCancelled,
     InternalFailure,
@@ -56,6 +58,12 @@ impl Display for AddresseeError {
                 "The card session conflicts with an existing key or card binding"
             }
             Self::CardSessionUnavailable => "The required card session is not connected",
+            Self::CardSlotNotEmpty => {
+                "A target card slot is occupied; explicit replacement authorization is required"
+            }
+            Self::CardProvisioningIncomplete => {
+                "The card operation did not produce a fully validated certificate; inspect the card"
+            }
             Self::AmbiguousPrivateKeyStorage => {
                 "A certificate cannot use both software and hardware private keys"
             }

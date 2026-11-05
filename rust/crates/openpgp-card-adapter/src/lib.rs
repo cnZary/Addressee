@@ -18,6 +18,7 @@ pub mod interaction;
 pub mod pcsc;
 #[cfg(not(target_os = "ios"))]
 pub mod pinentry;
+pub mod provisioning;
 pub mod remote_key;
 pub mod resolver;
 pub mod transport;

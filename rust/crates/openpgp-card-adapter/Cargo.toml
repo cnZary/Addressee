@@ -40,3 +40,6 @@ zeroize.workspace = true
 openpgp-core = { path = "../openpgp-core" }
 openpgp-policy = { path = "../openpgp-policy", optional = true }
 rand = { workspace = true, optional = true }
+
+[dev-dependencies]
+rand.workspace = true

@@ -11,8 +11,8 @@ use std::{
 use nom::{bytes::complete as bytes, combinator, sequence};
 
 use crate::{
-    Error,
     ocard::data::{Fingerprint, KeySet},
+    Error,
 };
 
 impl From<[u8; 20]> for Fingerprint {

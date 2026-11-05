@@ -16,11 +16,12 @@ The local compatibility work must use one rPGP 0.21.0 type system throughout the
 ## Addressee local changes
 
 - `Cargo.toml`: changed only the normalized `pgp` dependency version from `0.20` to `=0.21.0`. The upstream `Cargo.toml.orig` remains unchanged.
-- No changes were made to `src/`, examples, tests, or license files. The upstream 0.8.1 library source required no compatibility edits to compile against rPGP 0.21.0.
+- `src/cardslot.rs`, `src/lib.rs`, `src/private.rs`, `src/rpgp.rs`, `tests/import.rs`, `tests/keygen.rs`, and `tests/util.rs`: `rustfmt`-only import grouping and ordering changes. No API, OpenPGP encoding, cryptographic operation, or test expectation changed. The upstream 0.8.1 library source required no semantic compatibility edits to compile against rPGP 0.21.0. No license text was modified.
 - `Cargo.lock` remains the upstream standalone-crate lockfile and therefore still records rPGP 0.20.0. Addressee builds this path dependency through `rust/Cargo.toml`, whose lockfile resolves rPGP 0.21.0; the vendored standalone lockfile is not used for that build.
 
 ## Verification
 
 - `cargo check --manifest-path rust/Cargo.toml -p openpgp-card-adapter`, run from the Addressee workspace root, completed successfully with `openpgp-card` 0.7.0, `openpgp-card-rpgp` 0.8.1, and `pgp` 0.21.0.
 - The same check with `--locked` also completed successfully. The root lockfile contains one `pgp` package entry, version 0.21.0.
-- No physical card or hardware integration test was run. The vendored library has no unit tests. Its executable integration tests are ignored hardware workflows; those tests and the helper-only card targets were not selected.
+- The initial compatibility checks did not access a physical card. The vendored library has no unit tests. Its executable integration tests are ignored hardware workflows; those tests and the helper-only card targets were not selected.
+- Later Addressee integration tests exercised the v4 P-256 provisioning, primary-signing, and decryption paths on one identified CanoKey over native USB. These results and their limits are recorded in `docs/HARDWARE.md`; they do not establish compatibility for the vendored crate as a whole, other algorithms, other cards, or NFC. No upstream review or security audit is inferred.

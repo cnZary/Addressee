@@ -486,7 +486,7 @@ fn signature_metadata(
 ) -> SignatureMetadata {
     SignatureMetadata {
         certificate_fingerprint: selection.certificate_fingerprint.clone(),
-        signer_fingerprint: FullFingerprint::from_rpgp(&selection.key.key.fingerprint()),
+        signer_fingerprint: FullFingerprint::from_rpgp(&selection.key.fingerprint()),
         algorithm: selection.algorithm.clone(),
         hash_algorithm: selection.policy_hash_algorithm,
         created_at: created_at.map(|created| u64::from(created.as_secs())),

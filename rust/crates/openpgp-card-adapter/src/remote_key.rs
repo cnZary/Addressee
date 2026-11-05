@@ -2379,6 +2379,78 @@ mod tests {
     }
 
     #[test]
+    fn resolver_binds_a_signing_primary_without_a_signing_subkey() {
+        let (secret, _) = SignedSecretKey::from_string(TestFixture::Nist256.armored_key())
+            .expect("parse the primary signing test key");
+        let mut certificate = secret.to_public_key();
+        certificate
+            .public_subkeys
+            .retain(|subkey| subkey.key.algorithm() == PublicKeyAlgorithm::ECDH);
+        assert_eq!(certificate.public_subkeys.len(), 1);
+        let mut flags = pgp::packet::KeyFlags::default();
+        flags.set_certify(true);
+        flags.set_sign(true);
+        let mut direct = pgp::packet::SignatureConfig::from_key(
+            rand::thread_rng(),
+            &secret.primary_key,
+            pgp::packet::SignatureType::Key,
+        )
+        .expect("direct-key signature configuration");
+        direct.hashed_subpackets = vec![
+            pgp::packet::Subpacket::regular(pgp::packet::SubpacketData::KeyFlags(flags))
+                .expect("key flags subpacket"),
+        ];
+        let signature = direct
+            .sign_key(
+                &secret.primary_key,
+                &Password::empty(),
+                secret.primary_key.public_key(),
+            )
+            .expect("sign primary key flags");
+        certificate.details.direct_signatures = vec![signature];
+        certificate.verify_bindings().expect("valid certificate");
+
+        let (session, state, interaction) = mock_session();
+        let mut resolver = crate::resolver::CardKeyResolver::new(session);
+        let fingerprint = openpgp_core::FullFingerprint::from_hex(&format!(
+            "{:X}",
+            certificate.primary_key.fingerprint()
+        ))
+        .expect("primary fingerprint");
+        resolver
+            .register(&certificate, KeyType::Signing, &fingerprint)
+            .expect("bind the primary to the signing slot");
+        let resolver: &dyn openpgp_core::RemotePrivateKeyResolver = &resolver;
+        assert_eq!(
+            resolver.backend(&fingerprint, &fingerprint),
+            Some(openpgp_core::Backend::OpenPgpCard)
+        );
+        assert!(resolver.runtime_capabilities_verified(&fingerprint, &fingerprint));
+        assert!(
+            resolver
+                .signing_key(&fingerprint, &fingerprint)
+                .expect("resolve primary signing")
+                .is_some()
+        );
+        assert!(
+            resolver
+                .decryption_key(&fingerprint, &fingerprint)
+                .expect("primary is not decryption")
+                .is_none()
+        );
+        assert_eq!(state.lock().expect("mock state").connections, 1);
+        assert_eq!(interaction.pin_requests.load(Ordering::Relaxed), 0);
+        assert!(
+            state
+                .lock()
+                .expect("mock state")
+                .events
+                .iter()
+                .all(|event| !matches!(event, Event::Sign(_, _) | Event::Decrypt(_)))
+        );
+    }
+
+    #[test]
     fn attestation_and_invalid_session_algorithms_fail_closed() {
         let component = public_component(PublicKeyAlgorithm::ECDSA);
         let (session, state, _) = mock_session();

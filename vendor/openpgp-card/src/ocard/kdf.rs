@@ -7,7 +7,7 @@
 use secrecy::{ExposeSecret, SecretBox, SecretString};
 use sha2::Digest;
 
-use crate::{Error, PinType, ocard::data::KdfDo};
+use crate::{ocard::data::KdfDo, Error, PinType};
 
 trait Hasher {
     /// Update the hash with the given value.

@@ -4,7 +4,7 @@ import Combine
 struct CardPinRequest: Identifiable, Sendable {
     let id: UUID
     let purpose: CardPinPurpose
-    let identity: CardIdentityFfi
+    let identity: CardIdentityFfi?
     let minimumLength: Int
     let maximumLength: Int
     let remainingRetries: Int?
@@ -56,7 +56,7 @@ final class CardInteractionCoordinator: ObservableObject {
     private struct PreparedPin {
         let operationID: UUID
         let purpose: CardPinPurpose
-        let identity: CardIdentityFfi
+        let identities: [CardIdentityFfi]
         let value: String
     }
 
@@ -116,11 +116,20 @@ final class CardInteractionCoordinator: ObservableObject {
         slot: CardSlot,
         identity: CardIdentityFfi
     ) async throws {
+        try await preparePin(operationID: operationID, slot: slot, identities: [identity])
+    }
+
+    func preparePin(
+        operationID: UUID,
+        slot: CardSlot,
+        identities: [CardIdentityFfi]
+    ) async throws {
+        guard !identities.isEmpty else { throw AddresseeError.InvalidInput }
         preparedPin = nil
         let purpose = slot.pinPurpose
         let pin = try await obtainPin(
             purpose: purpose,
-            identity: identity,
+            identity: identities.count == 1 ? identities[0] : nil,
             id: operationID,
             opensNFCSession: true
         )
@@ -130,7 +139,7 @@ final class CardInteractionCoordinator: ObservableObject {
         preparedPin = PreparedPin(
             operationID: operationID,
             purpose: purpose,
-            identity: identity,
+            identities: identities,
             value: pin
         )
     }
@@ -203,7 +212,7 @@ final class CardInteractionCoordinator: ObservableObject {
         guard let preparedPin,
               preparedPin.operationID == operationID,
               preparedPin.purpose == purpose,
-              preparedPin.identity == identity else {
+              preparedPin.identities.contains(identity) else {
             throw CardInteractionErrorFfi.Unavailable
         }
         return preparedPin.value
@@ -211,7 +220,7 @@ final class CardInteractionCoordinator: ObservableObject {
 
     private func obtainPin(
         purpose: CardPinPurpose,
-        identity: CardIdentityFfi,
+        identity: CardIdentityFfi?,
         id: UUID = UUID(),
         minimumLength: Int = 6,
         maximumLength: Int = 64,

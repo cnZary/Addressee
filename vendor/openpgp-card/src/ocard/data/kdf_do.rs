@@ -4,12 +4,12 @@
 use std::convert::TryFrom;
 
 use crate::{
-    Error,
     ocard::{
         data::KdfDo,
         tags::Tags,
-        tlv::{Tlv, tag::Tag, value::Value},
+        tlv::{tag::Tag, value::Value, Tlv},
     },
+    Error,
 };
 
 impl TryFrom<&[u8]> for KdfDo {

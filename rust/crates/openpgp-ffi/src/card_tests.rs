@@ -341,8 +341,15 @@ fn offline_card_reservations_preserve_storage_rules_without_a_live_session() {
         engine.reserve_card_binding(mismatched, fixture.public_certificate.clone()),
         Err(AddresseeError::CardRegistrationConflict)
     );
+    assert!(!engine.list_keys().unwrap()[0].primary.key_flags.sign);
+    let mut non_signing_primary = registration.clone();
+    non_signing_primary.components[0].component_fingerprint = fixture.fingerprint.clone();
+    assert_eq!(
+        engine.reserve_card_binding(non_signing_primary, fixture.public_certificate.clone()),
+        Err(AddresseeError::UnsupportedOperation)
+    );
     let mut missing_component = registration.clone();
-    missing_component.components[0].component_fingerprint = fixture.fingerprint.clone();
+    missing_component.components[0].component_fingerprint = "00".repeat(20);
     assert_eq!(
         engine.reserve_card_binding(missing_component, fixture.public_certificate.clone()),
         Err(AddresseeError::InvalidCertificate)
@@ -411,6 +418,93 @@ fn an_existing_software_certificate_cannot_become_hardware_backed() {
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn a_signing_primary_can_be_reserved_with_a_public_decryption_subkey() {
+    let fixture = Fixture::new();
+    let (mut secret, _) = SignedSecretKey::from_string(
+        std::str::from_utf8(&fixture.private_key).expect("armored test private key"),
+    )
+    .expect("parse test private key");
+    let mut flags = pgp::packet::KeyFlags::default();
+    flags.set_certify(true);
+    flags.set_sign(true);
+    let mut direct = pgp::packet::SignatureConfig::from_key(
+        rand::thread_rng(),
+        &secret.primary_key,
+        pgp::packet::SignatureType::Key,
+    )
+    .unwrap();
+    direct.hashed_subpackets = vec![
+        pgp::packet::Subpacket::regular(pgp::packet::SubpacketData::SignatureCreationTime(
+            secret.primary_key.created_at(),
+        ))
+        .unwrap(),
+        pgp::packet::Subpacket::regular(pgp::packet::SubpacketData::KeyFlags(flags)).unwrap(),
+    ];
+    let signature = direct
+        .sign_key(
+            &secret.primary_key,
+            &Password::from(PASSWORD),
+            secret.primary_key.public_key(),
+        )
+        .unwrap();
+    secret.details.direct_signatures = vec![signature];
+    secret.public_subkeys = vec![secret.secret_subkeys[1].signed_public_key()];
+    secret.secret_subkeys.clear();
+    let public = pgp::ser::Serialize::to_bytes(&secret.to_public_key()).unwrap();
+    let engine = OpenPgpEngine::new();
+    engine.import_public_key(public.clone()).unwrap();
+    let registration = crate::CardRegistrationFfi {
+        certificate_fingerprint: fixture.fingerprint.clone(),
+        identity: crate::CardIdentityFfi {
+            manufacturer: 0xF1D0,
+            serial: 0x0123ABCD,
+            version: 0x0304,
+        },
+        components: vec![
+            crate::CardComponentBindingFfi {
+                slot: crate::CardSlot::Signing,
+                component_fingerprint: fixture.fingerprint.clone(),
+            },
+            crate::CardComponentBindingFfi {
+                slot: crate::CardSlot::Decryption,
+                component_fingerprint: fixture.resolver.decryption_fingerprint.to_string(),
+            },
+        ],
+    };
+    engine
+        .reserve_card_binding(registration.clone(), public.clone())
+        .unwrap();
+    assert!(engine.card_registrations().unwrap().is_empty());
+    assert!(
+        engine
+            .sign_detached(
+                fixture.fingerprint.clone(),
+                String::new(),
+                fixture.at,
+                b"offline card reservation".to_vec(),
+                MessageFormatFfi::Binary,
+            )
+            .is_err()
+    );
+    engine
+        .reserve_card_binding(registration, public.clone())
+        .unwrap();
+    engine
+        .release_card_binding(fixture.fingerprint.clone())
+        .unwrap();
+    assert!(matches!(
+        engine.sign_detached(
+            fixture.fingerprint,
+            String::new(),
+            fixture.at,
+            b"reservation was released".to_vec(),
+            MessageFormatFfi::Binary,
+        ),
+        Err(AddresseeError::PublicKeyOnly)
+    ));
 }
 
 #[test]

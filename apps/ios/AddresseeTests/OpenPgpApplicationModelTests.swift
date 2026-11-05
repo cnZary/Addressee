@@ -172,8 +172,115 @@ final class OpenPgpApplicationModelTests: XCTestCase {
         XCTAssertEqual(information.slots.count, 3)
         XCTAssertEqual(information.slots[0].touchPolicy, "Off")
         XCTAssertEqual(sessions.lastManagementExpectedIdentity, registration.identity)
+        XCTAssertEqual(sessions.lastManagementPurpose, .inspection)
         XCTAssertTrue(model.keys.isEmpty)
         XCTAssertEqual(model.cardRegistrations, [registration])
+    }
+
+    func testHardwareP256ProvisioningImportsPublicCertificateWithoutAssociation() async throws {
+        let certificateModel = OpenPgpApplicationModel()
+        await certificateModel.load()
+        let softwareKey = try await certificateModel.generate(
+            profile: .nistP256v4,
+            userID: "Public Provisioning Fixture <provisioning@example.invalid>",
+            password: "provisioning-fixture-only",
+            exportPolicy: .disabled
+        )
+        let publicCertificate = try await certificateModel.exportPublic(
+            fingerprint: softwareKey.summary.fingerprint,
+            format: .binary
+        )
+        let signing = try XCTUnwrap(softwareKey.summary.subkeys.first(where: { $0.keyFlags.sign }))
+        let decryption = try XCTUnwrap(softwareKey.summary.subkeys.first(where: {
+            $0.keyFlags.encryptCommunications || $0.keyFlags.encryptStorage
+        }))
+        let identity = CardIdentityFfi(manufacturer: 0xF1D0, serial: 0x10203040, version: 0x0304)
+        let expected = CardGeneratedCertificateFfi(
+            identity: identity,
+            certificateFingerprint: softwareKey.summary.fingerprint,
+            signingComponent: signing.fingerprint,
+            decryptionComponent: decryption.fingerprint,
+            publicCertificate: publicCertificate
+        )
+        let sessions = MockCardSessions()
+        let generator = CardProvisioningSpy(result: expected)
+        let model = OpenPgpApplicationModel(
+            cardSessions: sessions,
+            hardwareP256Generator: { session, userID, userPin, adminPin, replaceExisting in
+                try await generator.generate(
+                    session: session,
+                    userID: userID,
+                    userPin: userPin,
+                    adminPin: adminPin,
+                    replaceExisting: replaceExisting
+                )
+            }
+        )
+        await model.load()
+
+        let generated = try await model.generateHardwareP256(
+            identity: identity,
+            userID: "Public Provisioning Fixture <provisioning@example.invalid>",
+            userPin: "synthetic-user-pin",
+            adminPin: "synthetic-admin-pin",
+            replaceExisting: false,
+            connection: CardConnectionSelection(method: .usb, readerName: "Synthetic Reader")
+        )
+
+        XCTAssertEqual(generated, expected)
+        XCTAssertEqual(model.keys.map(\.fingerprint), [expected.certificateFingerprint])
+        XCTAssertEqual(model.keys.first?.storage, .publicOnly)
+        XCTAssertFalse(try XCTUnwrap(model.keys.first).isSecret)
+        XCTAssertTrue(model.cardRegistrations.isEmpty)
+        XCTAssertTrue(sessions.registrations.isEmpty)
+        XCTAssertTrue(model.signingKeys.isEmpty)
+        XCTAssertTrue(model.decryptionKeys.isEmpty)
+        XCTAssertEqual(sessions.lastManagementPurpose, .p256Provisioning)
+        XCTAssertEqual(sessions.lastManagementExpectedIdentity, identity)
+        let calls = await generator.calls
+        XCTAssertEqual(calls.count, 1)
+        let call = try XCTUnwrap(calls.first)
+        XCTAssertEqual(call.identity, identity)
+        XCTAssertEqual(call.userID, "Public Provisioning Fixture <provisioning@example.invalid>")
+        XCTAssertEqual(call.userPin, "synthetic-user-pin")
+        XCTAssertEqual(call.adminPin, "synthetic-admin-pin")
+        XCTAssertFalse(call.replaceExisting)
+        XCTAssertNil(model.errorMessage)
+    }
+}
+
+private actor CardProvisioningSpy {
+    struct Call {
+        let identity: CardIdentityFfi
+        let userID: String
+        let userPin: String
+        let adminPin: String
+        let replaceExisting: Bool
+    }
+
+    private let result: CardGeneratedCertificateFfi
+    private(set) var calls: [Call] = []
+
+    init(result: CardGeneratedCertificateFfi) {
+        self.result = result
+    }
+
+    func generate(
+        session: OpenPgpCardManagementSession,
+        userID: String,
+        userPin: String,
+        adminPin: String,
+        replaceExisting: Bool
+    ) throws -> CardGeneratedCertificateFfi {
+        let inspected = try session.inspect()
+        calls.append(Call(
+            identity: inspected.identity,
+            userID: userID,
+            userPin: userPin,
+            adminPin: adminPin,
+            replaceExisting: replaceExisting
+        ))
+        return result
     }
 }
 
@@ -181,6 +288,7 @@ final class OpenPgpApplicationModelTests: XCTestCase {
 private final class MockCardSessions: CardSessionManaging {
     private(set) var registrations: [CardRegistrationFfi] = []
     private(set) var lastManagementExpectedIdentity: CardIdentityFfi?
+    private(set) var lastManagementPurpose: CardManagementPurpose?
     var onChange: (([CardRegistrationFfi]) -> Void)?
 
     func activate(_ registration: CardRegistrationFfi) {
@@ -211,6 +319,13 @@ private final class MockCardSessions: CardSessionManaging {
         onChange?(registrations)
     }
 
+    func disconnect(certificateFingerprint: String, identity: CardIdentityFfi) async throws {
+        registrations.removeAll {
+            $0.certificateFingerprint == certificateFingerprint && $0.identity == identity
+        }
+        onChange?(registrations)
+    }
+
     func withCardSession<T: Sendable>(
         certificateFingerprint: String,
         operation: PrivateKeyOperation,
@@ -223,9 +338,11 @@ private final class MockCardSessions: CardSessionManaging {
     func withUnboundCardManagementSession<T: Sendable>(
         expectedIdentity: CardIdentityFfi?,
         connection: CardConnectionSelection,
+        purpose: CardManagementPurpose = .inspection,
         operation: @escaping @Sendable (OpenPgpCardManagementSession) async throws -> T
     ) async throws -> T {
         lastManagementExpectedIdentity = expectedIdentity
+        lastManagementPurpose = purpose
         let identity = expectedIdentity ?? registrations.first?.identity ?? CardIdentityFfi(
             manufacturer: 0xF1D0,
             serial: 0x10203040,
