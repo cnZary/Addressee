@@ -140,8 +140,10 @@ impl CapabilityEntry {
         self.is_operation_enabled_with_runtime_discovery(operation, false)
     }
 
-    /// Runtime discovery is additional evidence for an authenticated card binding, not a static
-    /// support claim. It never substitutes for implementation, unit, or physical-hardware tests.
+    /// Runtime discovery is mandatory for a card operation, but does not replace implementation
+    /// or unit tests. Missing physical evidence is not a compatibility claim and does not block
+    /// an otherwise implemented card operation. A recorded failure or an unsupported Secure
+    /// Enclave operation remains disabled.
     pub fn is_operation_enabled_with_runtime_discovery(
         &self,
         operation: Operation,
@@ -162,10 +164,12 @@ impl CapabilityEntry {
         if !claim_satisfied
             || evidence.implementation != ImplementationStatus::Implemented
             || evidence.unit_tests != TestStatus::Passed
+            || evidence.physical_hardware_tests == TestStatus::Failed
         {
             return false;
         }
-        !self.backend.is_hardware() || evidence.physical_hardware_tests == TestStatus::Passed
+        self.backend != Backend::SecureEnclave
+            || evidence.physical_hardware_tests == TestStatus::Passed
     }
 
     /// Full support adds independent interoperability and, for hardware, physical-device evidence.
@@ -242,6 +246,8 @@ impl CapabilityEntry {
                         );
                     let card_validated = backend == Backend::OpenPgpCard
                         && tested_card_operations(algorithm, key_version, operation);
+                    let card_implemented = backend == Backend::OpenPgpCard
+                        && locally_tested_card_operations(algorithm, key_version, operation);
                     let secure_enclave_validated = backend == Backend::SecureEnclave
                         && tested_secure_enclave_operations(algorithm, key_version, operation);
                     let secure_enclave_implemented = backend == Backend::SecureEnclave
@@ -258,6 +264,7 @@ impl CapabilityEntry {
                         lifecycle_validated
                             || message_validated
                             || card_validated
+                            || card_implemented
                             || secure_enclave_implemented,
                     );
                     if backend == Backend::Software
@@ -448,8 +455,10 @@ pub(crate) fn independent_interop_passed(
 /// Identified CanoKey P-256 evidence covers host-CLI subkey operations on
 /// 2026-10-26 and 2026-10-27, and physical iPhone primary-key provisioning and
 /// USB association on 2026-11-05. GnuPG accepted the card-signed primary
-/// certificate. Runtime discovery remains mandatory for every card operation.
-fn tested_card_operations(
+/// certificate. A physical YubiKey produced an attached RSA-4096 subkey signature
+/// over USB on 2026-11-07, which GnuPG independently verified. Runtime discovery
+/// remains mandatory for every card operation.
+pub(crate) fn tested_card_operations(
     algorithm: Algorithm,
     key_version: KeyVersion,
     operation: Operation,
@@ -472,6 +481,46 @@ fn tested_card_operations(
                 | Operation::Decrypt
                 | Operation::ExportPublic
                 | Operation::UseAsEncryptionSubkey
+        ),
+        Algorithm::Rsa4096 => {
+            matches!(operation, Operation::Sign | Operation::UseAsSigningSubkey)
+        }
+        _ => false,
+    }
+}
+
+/// The card adapter tests use protocol mocks, and the FFI tests use real rPGP components
+/// through a synthetic remote provider. These prove implementation paths, not hardware support.
+pub(crate) fn locally_tested_card_operations(
+    algorithm: Algorithm,
+    key_version: KeyVersion,
+    operation: Operation,
+) -> bool {
+    if key_version != KeyVersion::V4 {
+        return false;
+    }
+    match algorithm {
+        Algorithm::Rsa2048 | Algorithm::Rsa3072 | Algorithm::Rsa4096 => matches!(
+            operation,
+            Operation::Sign
+                | Operation::Decrypt
+                | Operation::UseAsPrimaryKey
+                | Operation::UseAsSigningSubkey
+                | Operation::UseAsEncryptionSubkey
+        ),
+        Algorithm::NistP256Ecdsa
+        | Algorithm::NistP384Ecdsa
+        | Algorithm::NistP521Ecdsa
+        | Algorithm::LegacyEd25519 => matches!(
+            operation,
+            Operation::Sign | Operation::UseAsPrimaryKey | Operation::UseAsSigningSubkey
+        ),
+        Algorithm::NistP256Ecdh
+        | Algorithm::NistP384Ecdh
+        | Algorithm::NistP521Ecdh
+        | Algorithm::LegacyCurve25519Ecdh => matches!(
+            operation,
+            Operation::Decrypt | Operation::UseAsEncryptionSubkey
         ),
         _ => false,
     }

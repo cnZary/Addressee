@@ -194,17 +194,28 @@ fn registry_is_complete_and_separates_lifecycle_evidence_from_other_operations()
             for operation in Operation::ALL {
                 assert!(!card.is_operation_enabled(operation));
                 assert!(!card.is_fully_supported(operation));
+                let implemented =
+                    crate::capability::tested_card_operations(algorithm, key_version, operation)
+                        || crate::capability::locally_tested_card_operations(
+                            algorithm,
+                            key_version,
+                            operation,
+                        );
+                assert_eq!(
+                    card.is_operation_enabled_with_runtime_discovery(operation, true),
+                    implemented
+                );
                 let evidence = card.evidence(operation).unwrap();
+                assert_eq!(
+                    evidence.implementation == ImplementationStatus::Implemented,
+                    implemented
+                );
+                assert_eq!(evidence.unit_tests == TestStatus::Passed, implemented);
                 if evidence.physical_hardware_tests == TestStatus::Passed {
-                    assert_eq!(evidence.implementation, ImplementationStatus::Implemented);
-                    assert_eq!(evidence.unit_tests, TestStatus::Passed);
                     assert_eq!(
                         evidence.independent_interoperability_tests,
                         TestStatus::Passed
                     );
-                } else {
-                    assert_ne!(evidence.implementation, ImplementationStatus::Implemented);
-                    assert_ne!(evidence.unit_tests, TestStatus::Passed);
                 }
             }
         }
@@ -434,11 +445,41 @@ fn card_operations_require_runtime_discovery_without_relaxing_other_evidence() {
     );
     assert!(!registry.is_fully_supported(p256_sign.0, p256_sign.1, p256_sign.2, p256_sign.3,));
 
+    let mut rsa = registry
+        .entry(Algorithm::Rsa4096, Backend::OpenPgpCard, KeyVersion::V4)
+        .unwrap()
+        .clone();
+    for operation in [Operation::Sign, Operation::UseAsSigningSubkey] {
+        assert!(rsa.is_operation_enabled_with_runtime_discovery(operation, true));
+        let evidence = rsa.evidence(operation).unwrap();
+        assert_eq!(evidence.physical_hardware_tests, TestStatus::Passed);
+        assert_eq!(
+            evidence.independent_interoperability_tests,
+            TestStatus::Passed
+        );
+    }
+    for operation in [
+        Operation::Decrypt,
+        Operation::UseAsPrimaryKey,
+        Operation::UseAsEncryptionSubkey,
+    ] {
+        assert!(!rsa.is_operation_enabled(operation));
+        assert!(rsa.is_operation_enabled_with_runtime_discovery(operation, true));
+        assert!(!rsa.is_fully_supported(operation));
+        assert_eq!(
+            rsa.evidence(operation).unwrap().physical_hardware_tests,
+            TestStatus::NotRun
+        );
+    }
+    evidence_mut(&mut rsa, Operation::Sign).physical_hardware_tests = TestStatus::Failed;
+    assert!(!rsa.is_operation_enabled_with_runtime_discovery(Operation::Sign, true));
+
     for (algorithm, operation) in [
         (Algorithm::NistP256Ecdsa, Operation::Verify),
-        (Algorithm::NistP384Ecdsa, Operation::Sign),
         (Algorithm::NistP256Ecdh, Operation::Sign),
         (Algorithm::Dsa, Operation::Sign),
+        (Algorithm::BrainpoolP256Ecdsa, Operation::Sign),
+        (Algorithm::Ed448, Operation::Sign),
     ] {
         assert!(!registry.is_operation_enabled_with_runtime_discovery(
             algorithm,
@@ -629,7 +670,7 @@ fn hardware_backends_are_non_exportable_and_secure_enclave_is_narrow() {
 }
 
 #[test]
-fn physical_card_evidence_is_limited_to_executed_p256_operations() {
+fn physical_card_evidence_is_limited_to_executed_operations() {
     let registry = CapabilityRegistry::baseline();
     for (algorithm, operation) in [
         (Algorithm::NistP256Ecdsa, Operation::Generate),
@@ -641,6 +682,8 @@ fn physical_card_evidence_is_limited_to_executed_p256_operations() {
         (Algorithm::NistP256Ecdh, Operation::Decrypt),
         (Algorithm::NistP256Ecdh, Operation::ExportPublic),
         (Algorithm::NistP256Ecdh, Operation::UseAsEncryptionSubkey),
+        (Algorithm::Rsa4096, Operation::Sign),
+        (Algorithm::Rsa4096, Operation::UseAsSigningSubkey),
     ] {
         let entry = registry
             .entry(algorithm, Backend::OpenPgpCard, KeyVersion::V4)
@@ -669,8 +712,14 @@ fn physical_card_evidence_is_limited_to_executed_p256_operations() {
             )
     }) {
         assert!(entry.evidence.iter().all(|evidence| {
-            evidence.physical_hardware_tests != TestStatus::Passed
-                && evidence.independent_interoperability_tests != TestStatus::Passed
+            let verified_rsa4096_signing = entry.algorithm == Algorithm::Rsa4096
+                && matches!(
+                    evidence.operation,
+                    Operation::Sign | Operation::UseAsSigningSubkey
+                );
+            verified_rsa4096_signing
+                || (evidence.physical_hardware_tests != TestStatus::Passed
+                    && evidence.independent_interoperability_tests != TestStatus::Passed)
         }));
     }
     for algorithm in [Algorithm::NistP256Ecdsa, Algorithm::NistP256Ecdh] {

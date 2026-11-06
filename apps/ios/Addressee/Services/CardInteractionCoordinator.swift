@@ -46,6 +46,7 @@ final class CardInteractionCallbacks: CardPinProvider, CardTouchPrompt {
 final class CardInteractionCoordinator: ObservableObject {
     @Published private(set) var pinRequest: CardPinRequest?
     @Published private(set) var touchRequest: CardTouchRequest?
+    @Published private(set) var isPresentationActive = false
     @Published var pin = ""
 
     private enum PendingInteraction {
@@ -150,7 +151,8 @@ final class CardInteractionCoordinator: ObservableObject {
               request.id == id,
               !pin.isEmpty else { return }
         let pin = pin
-        clearInteraction()
+        clearPendingInteraction()
+        if request.opensNFCSession { isPresentationActive = false }
         continuation.resume(returning: pin)
     }
 
@@ -158,7 +160,7 @@ final class CardInteractionCoordinator: ObservableObject {
         guard let request = touchRequest,
               case .touch(let id, let continuation) = pending,
               request.id == id else { return }
-        clearInteraction()
+        clearPendingInteraction()
         continuation.resume()
     }
 
@@ -243,6 +245,7 @@ final class CardInteractionCoordinator: ObservableObject {
                 }
                 pending = .pin(id, continuation)
                 pin = ""
+                isPresentationActive = true
                 pinRequest = CardPinRequest(
                     id: id,
                     purpose: purpose,
@@ -277,6 +280,7 @@ final class CardInteractionCoordinator: ObservableObject {
                     return
                 }
                 pending = .touch(id, continuation)
+                isPresentationActive = true
                 touchRequest = CardTouchRequest(id: id, slot: slot)
             }
         } onCancel: {
@@ -292,12 +296,17 @@ final class CardInteractionCoordinator: ObservableObject {
         }
     }
 
-    private func clearInteraction() {
+    private func clearPendingInteraction() {
         pending = nil
         preparedPin = nil
         pin = ""
         pinRequest = nil
         touchRequest = nil
+    }
+
+    private func clearInteraction() {
+        clearPendingInteraction()
+        isPresentationActive = false
     }
 }
 

@@ -170,8 +170,8 @@
         {
           "operation": "sign",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
@@ -194,32 +194,32 @@
         {
           "operation": "decrypt",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
         {
           "operation": "useAsPrimaryKey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
         {
           "operation": "useAsSigningSubkey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
         {
           "operation": "useAsEncryptionSubkey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         }
@@ -618,8 +618,8 @@
         {
           "operation": "sign",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
@@ -642,32 +642,32 @@
         {
           "operation": "decrypt",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
         {
           "operation": "useAsPrimaryKey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
         {
           "operation": "useAsSigningSubkey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
         {
           "operation": "useAsEncryptionSubkey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         }
@@ -1066,10 +1066,10 @@
         {
           "operation": "sign",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
-          "independentInteroperabilityTests": "notRun",
-          "physicalHardwareTests": "notRun"
+          "implementation": "implemented",
+          "unitTests": "passed",
+          "independentInteroperabilityTests": "passed",
+          "physicalHardwareTests": "passed"
         },
         {
           "operation": "verify",
@@ -1090,32 +1090,32 @@
         {
           "operation": "decrypt",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
         {
           "operation": "useAsPrimaryKey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
         {
           "operation": "useAsSigningSubkey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
-          "independentInteroperabilityTests": "notRun",
-          "physicalHardwareTests": "notRun"
+          "implementation": "implemented",
+          "unitTests": "passed",
+          "independentInteroperabilityTests": "passed",
+          "physicalHardwareTests": "passed"
         },
         {
           "operation": "useAsEncryptionSubkey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         }
@@ -4426,8 +4426,8 @@
         {
           "operation": "sign",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
@@ -4458,16 +4458,16 @@
         {
           "operation": "useAsPrimaryKey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
         {
           "operation": "useAsSigningSubkey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
@@ -4898,8 +4898,8 @@
         {
           "operation": "decrypt",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
@@ -4922,8 +4922,8 @@
         {
           "operation": "useAsEncryptionSubkey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         }
@@ -5322,8 +5322,8 @@
         {
           "operation": "sign",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
@@ -5354,16 +5354,16 @@
         {
           "operation": "useAsPrimaryKey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
         {
           "operation": "useAsSigningSubkey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
@@ -5794,8 +5794,8 @@
         {
           "operation": "decrypt",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
@@ -5818,8 +5818,8 @@
         {
           "operation": "useAsEncryptionSubkey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         }
@@ -8906,8 +8906,8 @@
         {
           "operation": "sign",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
@@ -8938,16 +8938,16 @@
         {
           "operation": "useAsPrimaryKey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
         {
           "operation": "useAsSigningSubkey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
@@ -9154,8 +9154,8 @@
         {
           "operation": "decrypt",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         },
@@ -9178,8 +9178,8 @@
         {
           "operation": "useAsEncryptionSubkey",
           "libraryClaim": "runtimeDiscoveryRequired",
-          "implementation": "notImplemented",
-          "unitTests": "notRun",
+          "implementation": "implemented",
+          "unitTests": "passed",
           "independentInteroperabilityTests": "notRun",
           "physicalHardwareTests": "notRun"
         }

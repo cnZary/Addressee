@@ -481,6 +481,30 @@ impl OpenPgpCardSession {
             resolver,
         )
     }
+
+    #[cfg(test)]
+    pub(crate) fn from_primary_resolver_for_tests(
+        public_certificate: &[u8],
+        resolver: Arc<dyn SharedCardResolver>,
+    ) -> Result<Self, AddresseeError> {
+        let certificate = parse_certificate(public_certificate)?;
+        let fingerprint = certificate.primary_key.fingerprint();
+        let component_fingerprint =
+            FullFingerprint::from_hex(&format!("{fingerprint:X}"))?.to_string();
+        Self::new(
+            certificate,
+            CardIdentityFfi {
+                manufacturer: 0xFFFF,
+                serial: 0x01020304,
+                version: 0x0304,
+            },
+            vec![CardComponentBindingFfi {
+                slot: CardSlot::Signing,
+                component_fingerprint,
+            }],
+            resolver,
+        )
+    }
 }
 
 fn parse_certificate(input: &[u8]) -> Result<SignedPublicKey, AddresseeError> {

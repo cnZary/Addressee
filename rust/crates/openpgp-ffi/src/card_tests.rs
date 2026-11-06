@@ -181,6 +181,160 @@ fn public_only_remote_workflows_cover_signing_encryption_and_files() {
 }
 
 #[test]
+fn card_v4_nist_p256_provider_workflow() {
+    card_provider_workflow(GenerationProfile::nist_p256_v4());
+}
+
+#[test]
+fn card_v4_nist_p384_provider_workflow() {
+    card_provider_workflow(GenerationProfile::nist_p384_v4());
+}
+
+#[test]
+fn card_v4_nist_p521_provider_workflow() {
+    card_provider_workflow(GenerationProfile::nist_p521_v4());
+}
+
+#[test]
+fn card_v4_rsa2048_provider_workflow() {
+    card_provider_workflow(card_rsa_profile(openpgp_policy::Algorithm::Rsa2048));
+}
+
+#[test]
+fn card_v4_rsa3072_provider_workflow() {
+    card_provider_workflow(card_rsa_profile(openpgp_policy::Algorithm::Rsa3072));
+}
+
+#[test]
+fn card_v4_rsa4096_provider_workflow() {
+    card_provider_workflow(card_rsa_profile(openpgp_policy::Algorithm::Rsa4096));
+}
+
+#[test]
+fn card_v4_legacy_curve25519_provider_workflow() {
+    card_provider_workflow(
+        GenerationProfile::legacy_curve25519_v4(
+            openpgp_policy::CompatibilityAcknowledgement::acknowledged(),
+        )
+        .unwrap(),
+    );
+}
+
+fn card_rsa_profile(algorithm: openpgp_policy::Algorithm) -> GenerationProfile {
+    GenerationProfile::legacy_rsa_v4(
+        algorithm,
+        openpgp_policy::CompatibilityAcknowledgement::acknowledged(),
+    )
+    .unwrap()
+}
+
+fn card_provider_workflow(profile: GenerationProfile) {
+    let algorithm = profile.primary_key.algorithm;
+    let fixture = Fixture::with_profile(profile);
+    let (engine, _) = fixture.connected();
+    let metadata = engine.key_metadata(fixture.fingerprint.clone()).unwrap();
+    let signing_metadata = metadata
+        .subkeys
+        .iter()
+        .find(|key| key.fingerprint == fixture.resolver.signing_fingerprint.as_str())
+        .unwrap();
+    assert!(signing_metadata.key_flags.sign, "{signing_metadata:?}");
+    let certificate_fingerprint =
+        FullFingerprint::from_hex(&fixture.fingerprint).expect("test certificate fingerprint");
+    let validity = engine
+        .lock()
+        .unwrap()
+        .evaluate_validity(&certificate_fingerprint, fixture.at)
+        .unwrap();
+    assert!(validity.subkey_is_valid(0).unwrap(), "{validity:?}");
+    let providers = engine.lock_remote_read().unwrap();
+    assert!(providers.runtime_capabilities_verified(
+        &certificate_fingerprint,
+        &fixture.resolver.signing_fingerprint,
+    ));
+    assert!(
+        providers
+            .signing_key(
+                &certificate_fingerprint,
+                &fixture.resolver.signing_fingerprint
+            )
+            .unwrap()
+            .is_some()
+    );
+    drop(providers);
+    let payload = format!("synthetic card workflow {algorithm:?}");
+    let signature = engine
+        .sign_detached(
+            fixture.fingerprint.clone(),
+            String::new(),
+            fixture.at,
+            payload.as_bytes().to_vec(),
+            MessageFormatFfi::Binary,
+        )
+        .unwrap_or_else(|error| panic!("{algorithm:?} subkey signing: {error:?}"));
+    assert_eq!(
+        engine
+            .verify_detached(payload.as_bytes().to_vec(), signature.artifact, fixture.at)
+            .unwrap()
+            .status,
+        VerificationStatusFfi::Valid,
+        "{algorithm:?} subkey verification"
+    );
+    let encrypted = engine
+        .encrypt_text(
+            vec![fixture.fingerprint.clone()],
+            fixture.at,
+            v4_config(),
+            payload.clone(),
+            MessageFormatFfi::Binary,
+        )
+        .unwrap_or_else(|error| panic!("{algorithm:?} encryption: {error:?}"));
+    let decrypted = engine
+        .decrypt_text(
+            fixture.fingerprint.clone(),
+            String::new(),
+            fixture.at,
+            encrypted,
+        )
+        .unwrap_or_else(|error| panic!("{algorithm:?} subkey decryption: {error:?}"));
+    assert_eq!(decrypted.report.status, DecryptionStatusFfi::Unsigned);
+    assert_eq!(decrypted.text.as_deref(), Some(payload.as_str()));
+
+    let (primary, _) = fixture.primary_connected();
+    let primary_signature = primary
+        .sign_detached(
+            fixture.fingerprint.clone(),
+            String::new(),
+            fixture.at,
+            payload.as_bytes().to_vec(),
+            MessageFormatFfi::Binary,
+        )
+        .unwrap_or_else(|error| panic!("{algorithm:?} primary signing: {error:?}"));
+    assert_eq!(
+        primary_signature.metadata.signer_fingerprint,
+        fixture.fingerprint
+    );
+    assert_eq!(
+        primary
+            .verify_detached(payload.into_bytes(), primary_signature.artifact, fixture.at,)
+            .unwrap()
+            .status,
+        VerificationStatusFfi::Valid,
+        "{algorithm:?} primary verification"
+    );
+    assert!(
+        fixture
+            .resolver
+            .failure
+            .password_lengths
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|length| *length == 0)
+    );
+}
+
+#[test]
 fn cancellation_and_provider_failures_are_typed_and_sanitized() {
     let fixture = Fixture::new();
     let (engine, _) = fixture.connected();
@@ -576,10 +730,14 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
+        Self::with_profile(GenerationProfile::nist_p256_v4())
+    }
+
+    fn with_profile(profile: GenerationProfile) -> Self {
         let mut store = SoftwareKeyStore::new();
         let generated = store
             .generate(
-                &GenerationProfile::nist_p256_v4(),
+                &profile,
                 "Synthetic Card FFI <card@example.invalid>",
                 PASSWORD,
                 PrivateExportPolicy::Allowed,
@@ -617,7 +775,7 @@ impl Fixture {
             failure,
             fail_resolution: AtomicBool::new(false),
         });
-        let at = u64::from(secret.primary_key.created_at().as_secs()) + 60;
+        let at = u64::from(Timestamp::now().as_secs());
         Self {
             fingerprint: fingerprint.to_string(),
             public_certificate: generated.public_certificate,
@@ -643,6 +801,60 @@ impl Fixture {
             .import_public_key(self.public_certificate.clone())
             .unwrap();
         let session = self.session();
+        engine.attach_card_session(session.clone()).unwrap();
+        (engine, session)
+    }
+
+    fn primary_connected(&self) -> (OpenPgpEngine, Arc<OpenPgpCardSession>) {
+        let (mut secret, _) = SignedSecretKey::from_string(
+            std::str::from_utf8(&self.private_key).expect("armored test private key"),
+        )
+        .expect("parse test private key");
+        let mut flags = pgp::packet::KeyFlags::default();
+        flags.set_certify(true);
+        flags.set_sign(true);
+        let mut direct = pgp::packet::SignatureConfig::from_key(
+            rand::thread_rng(),
+            &secret.primary_key,
+            pgp::packet::SignatureType::Key,
+        )
+        .unwrap();
+        direct.hashed_subpackets = vec![
+            pgp::packet::Subpacket::regular(pgp::packet::SubpacketData::SignatureCreationTime(
+                secret.primary_key.created_at(),
+            ))
+            .unwrap(),
+            pgp::packet::Subpacket::regular(pgp::packet::SubpacketData::KeyFlags(flags)).unwrap(),
+        ];
+        let signature = direct
+            .sign_key(
+                &secret.primary_key,
+                &Password::from(PASSWORD),
+                secret.primary_key.public_key(),
+            )
+            .unwrap();
+        secret.details.direct_signatures = vec![signature];
+        secret
+            .primary_key
+            .remove_password(&Password::from(PASSWORD))
+            .unwrap();
+        let public = pgp::ser::Serialize::to_bytes(&secret.to_public_key()).unwrap();
+        let fingerprint = FullFingerprint::from_hex(&self.fingerprint).unwrap();
+        let failure = Arc::new(Failure::default());
+        let resolver = Arc::new(TestResolver {
+            certificate_fingerprint: fingerprint.clone(),
+            signing_fingerprint: fingerprint.clone(),
+            decryption_fingerprint: fingerprint,
+            signing: TestRemoteKey::new_primary(secret.primary_key.clone(), Arc::clone(&failure)),
+            decryption: TestRemoteKey::new_primary(secret.primary_key, Arc::clone(&failure)),
+            failure,
+            fail_resolution: AtomicBool::new(false),
+        });
+        let engine = OpenPgpEngine::new();
+        let session = Arc::new(
+            OpenPgpCardSession::from_primary_resolver_for_tests(&public, resolver).unwrap(),
+        );
+        engine.import_public_key(public).unwrap();
         engine.attach_card_session(session.clone()).unwrap();
         (engine, session)
     }
@@ -747,15 +959,45 @@ impl RemotePrivateKeyResolver for TestResolver {
     }
 }
 
-#[derive(Debug)]
+enum TestRemoteKeyMaterial {
+    Primary(pgp::packet::SecretKey),
+    Subkey(SecretSubkey),
+}
+
 struct TestRemoteKey {
-    key: SecretSubkey,
+    key: TestRemoteKeyMaterial,
     failure: Arc<Failure>,
+}
+
+impl std::fmt::Debug for TestRemoteKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TestRemoteKey")
+            .field("fingerprint", &self.key_details().fingerprint())
+            .finish_non_exhaustive()
+    }
 }
 
 impl TestRemoteKey {
     fn new(key: SecretSubkey, failure: Arc<Failure>) -> Self {
-        Self { key, failure }
+        Self {
+            key: TestRemoteKeyMaterial::Subkey(key),
+            failure,
+        }
+    }
+
+    fn new_primary(key: pgp::packet::SecretKey, failure: Arc<Failure>) -> Self {
+        Self {
+            key: TestRemoteKeyMaterial::Primary(key),
+            failure,
+        }
+    }
+
+    fn key_details(&self) -> &dyn KeyDetails {
+        match &self.key {
+            TestRemoteKeyMaterial::Primary(key) => key,
+            TestRemoteKeyMaterial::Subkey(key) => key,
+        }
     }
 
     fn record_password(&self, password: &Password) -> pgp::errors::Result<()> {
@@ -778,25 +1020,25 @@ impl TestRemoteKey {
 
 impl KeyDetails for TestRemoteKey {
     fn version(&self) -> KeyVersion {
-        self.key.version()
+        self.key_details().version()
     }
     fn legacy_key_id(&self) -> KeyId {
-        self.key.legacy_key_id()
+        self.key_details().legacy_key_id()
     }
     fn fingerprint(&self) -> Fingerprint {
-        self.key.fingerprint()
+        self.key_details().fingerprint()
     }
     fn algorithm(&self) -> pgp::crypto::public_key::PublicKeyAlgorithm {
-        self.key.algorithm()
+        self.key_details().algorithm()
     }
     fn created_at(&self) -> Timestamp {
-        self.key.created_at()
+        self.key_details().created_at()
     }
     fn legacy_v3_expiration_days(&self) -> Option<u16> {
-        self.key.legacy_v3_expiration_days()
+        self.key_details().legacy_v3_expiration_days()
     }
     fn public_params(&self) -> &PublicParams {
-        self.key.public_params()
+        self.key_details().public_params()
     }
 }
 
@@ -808,11 +1050,14 @@ impl SigningKey for TestRemoteKey {
         data: &[u8],
     ) -> pgp::errors::Result<SignatureBytes> {
         self.record_password(password)?;
-        SigningKey::sign(&self.key, password, hash, data)
+        match &self.key {
+            TestRemoteKeyMaterial::Primary(key) => SigningKey::sign(key, password, hash, data),
+            TestRemoteKeyMaterial::Subkey(key) => SigningKey::sign(key, password, hash, data),
+        }
     }
 
     fn hash_alg(&self) -> HashAlgorithm {
-        self.key.public_params().hash_alg()
+        self.key_details().public_params().hash_alg()
     }
 }
 
@@ -824,7 +1069,14 @@ impl DecryptionKey for TestRemoteKey {
         typ: EskType,
     ) -> pgp::errors::Result<pgp::errors::Result<PlainSessionKey>> {
         self.record_password(password)?;
-        DecryptionKey::decrypt(&self.key, password, values, typ)
+        match &self.key {
+            TestRemoteKeyMaterial::Primary(key) => {
+                DecryptionKey::decrypt(key, password, values, typ)
+            }
+            TestRemoteKeyMaterial::Subkey(key) => {
+                DecryptionKey::decrypt(key, password, values, typ)
+            }
+        }
     }
 }
 

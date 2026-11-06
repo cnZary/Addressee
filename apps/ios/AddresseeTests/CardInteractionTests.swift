@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 @testable import Addressee
 
@@ -81,6 +82,7 @@ final class CardInteractionTests: XCTestCase {
         XCTAssertNil(coordinator.pinRequest?.remainingRetries)
         coordinator.pin = "synthetic-nfc-pin"
         coordinator.submitPin()
+        XCTAssertFalse(coordinator.isPresentationActive)
         coordinator.cancelInteraction(id: requestID)
         try await preparation.value
 
@@ -170,13 +172,94 @@ final class CardInteractionTests: XCTestCase {
         }
     }
 
+    func testPinToTouchTransitionKeepsTheRootSheetAlive() async throws {
+        let coordinator = CardInteractionCoordinator()
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        let host = UIHostingController(rootView: RootTabView(cardInteraction: coordinator))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer {
+            coordinator.cancelActiveInteraction()
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        let identity = identity
+        let operation = Task.detached {
+            _ = try coordinator.requestPin(purpose: .signing, identity: identity)
+            try await Task.sleep(nanoseconds: 50_000_000)
+            try coordinator.requestTouch(slot: .signing)
+        }
+
+        let pinPresented = await waitUntil {
+            coordinator.pinRequest != nil && host.presentedViewController != nil
+        }
+        XCTAssertTrue(pinPresented)
+        try await Task.sleep(nanoseconds: 250_000_000)
+        XCTAssertNotNil(coordinator.pinRequest)
+        XCTAssertNotNil(host.presentedViewController)
+        coordinator.pin = "synthetic-test-pin"
+        coordinator.submitPin()
+        XCTAssertTrue(coordinator.isPresentationActive)
+
+        let touchPresented = await waitUntil {
+            coordinator.touchRequest != nil && host.presentedViewController != nil
+        }
+        XCTAssertTrue(
+            touchPresented,
+            "pinPending=\(coordinator.pinRequest != nil) touchPending=\(coordinator.touchRequest != nil) presentationActive=\(coordinator.isPresentationActive) sheetPresented=\(host.presentedViewController != nil)"
+        )
+        try await Task.sleep(nanoseconds: 250_000_000)
+        XCTAssertNotNil(coordinator.touchRequest)
+        XCTAssertNotNil(host.presentedViewController)
+        coordinator.confirmTouch()
+        try await operation.value
+        XCTAssertNil(coordinator.pinRequest)
+        XCTAssertNil(coordinator.touchRequest)
+        XCTAssertTrue(coordinator.isPresentationActive)
+        coordinator.cancelActiveInteraction()
+        let sheetDismissed = await waitUntil { host.presentedViewController == nil }
+        XCTAssertTrue(sheetDismissed)
+        XCTAssertFalse(coordinator.isPresentationActive)
+    }
+
+    func testDismissingThePinSheetCancelsTheCallback() async throws {
+        let coordinator = CardInteractionCoordinator()
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        let host = UIHostingController(rootView: RootTabView(cardInteraction: coordinator))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer {
+            coordinator.cancelActiveInteraction()
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        let identity = identity
+        let operation = Task.detached {
+            try coordinator.requestPin(purpose: .signing, identity: identity)
+        }
+
+        let pinPresented = await waitUntil {
+            coordinator.pinRequest != nil && host.presentedViewController != nil
+        }
+        XCTAssertTrue(pinPresented)
+        host.presentedViewController?.dismiss(animated: false)
+        do {
+            _ = try await operation.value
+            XCTFail("Dismissing the PIN sheet must cancel the callback")
+        } catch {
+            XCTAssertEqual(error as? CardInteractionErrorFfi, .Cancelled)
+        }
+        XCTAssertNil(coordinator.pinRequest)
+        XCTAssertTrue(coordinator.pin.isEmpty)
+    }
+
     private func waitUntil(_ predicate: @escaping () -> Bool) async -> Bool {
-        for _ in 0..<1_000 {
+        for _ in 0..<500 {
             if predicate() {
                 return true
             }
-            await Task.yield()
+            try? await Task.sleep(nanoseconds: 10_000_000)
         }
-        return false
+        return predicate()
     }
 }

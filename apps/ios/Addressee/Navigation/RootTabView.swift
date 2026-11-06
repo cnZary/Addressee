@@ -5,8 +5,8 @@ struct RootTabView: View {
     @StateObject private var model: OpenPgpApplicationModel
     @StateObject private var cardInteraction: CardInteractionCoordinator
 
-    init() {
-        let interaction = CardInteractionCoordinator()
+    init(cardInteraction: CardInteractionCoordinator? = nil) {
+        let interaction = cardInteraction ?? CardInteractionCoordinator()
         _cardInteraction = StateObject(wrappedValue: interaction)
         _model = StateObject(wrappedValue: OpenPgpApplicationModel.live(cardInteraction: interaction))
     }
@@ -31,23 +31,28 @@ struct RootTabView: View {
         }
         .accessibilityIdentifier("navigation.rootTabs")
         .task { await model.load() }
-        .sheet(item: Binding(
-            get: { cardInteraction.pinRequest },
-            set: { _ in }
-        )) { request in
-            CardPinEntryView(request: request, coordinator: cardInteraction)
-                .onDisappear {
-                    cardInteraction.cancelInteraction(id: request.id)
-                }
-        }
-        .sheet(item: Binding(
-            get: { cardInteraction.touchRequest },
-            set: { _ in }
-        )) { request in
-            CardTouchPromptView(request: request, coordinator: cardInteraction)
-                .onDisappear {
-                    cardInteraction.cancelInteraction(id: request.id)
-                }
+        .sheet(isPresented: Binding(
+            get: { cardInteraction.isPresentationActive },
+            set: { isPresented in
+                if !isPresented { cardInteraction.cancelActiveInteraction() }
+            }
+        )) {
+            if let request = cardInteraction.pinRequest {
+                CardPinEntryView(request: request, coordinator: cardInteraction)
+                    .onDisappear {
+                        cardInteraction.cancelInteraction(id: request.id)
+                    }
+            } else if let request = cardInteraction.touchRequest {
+                CardTouchPromptView(request: request, coordinator: cardInteraction)
+                    .onDisappear {
+                        cardInteraction.cancelInteraction(id: request.id)
+                    }
+            } else {
+                ProgressView("operation.inProgress")
+                    .padding()
+                    .presentationDetents([.medium])
+                    .interactiveDismissDisabled()
+            }
         }
     }
 
