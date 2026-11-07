@@ -43,10 +43,7 @@ struct RootTabView: View {
                         cardInteraction.cancelInteraction(id: request.id)
                     }
             } else if let request = cardInteraction.touchRequest {
-                CardTouchPromptView(request: request, coordinator: cardInteraction)
-                    .onDisappear {
-                        cardInteraction.cancelInteraction(id: request.id)
-                    }
+                CardTouchProgressView(request: request)
             } else {
                 ProgressView("operation.inProgress")
                     .padding()

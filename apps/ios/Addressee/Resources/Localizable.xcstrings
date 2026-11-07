@@ -568,29 +568,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Continue, then touch the card when it requests confirmation for authentication."
+            "value" : "Touch the card now to authorize authentication. Wait for the operation to finish."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "继续后，请在卡片请求确认认证操作时触摸卡片。"
-          }
-        }
-      }
-    },
-    "card.touch.continue" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continue to Card Operation"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "继续卡片操作"
+            "value" : "请现在触摸卡片以授权认证操作，并等待操作完成。"
           }
         }
       }
@@ -600,29 +584,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Continue, then touch the card when it requests confirmation for decryption."
+            "value" : "Touch the card now to authorize decryption. Wait for the operation to finish."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "继续后，请在卡片请求确认解密操作时触摸卡片。"
-          }
-        }
-      }
-    },
-    "card.touch.notVerified" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continuing does not prove that the physical touch occurred."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "继续操作并不代表已验证实际触摸。"
+            "value" : "请现在触摸卡片以授权解密操作，并等待操作完成。"
           }
         }
       }
@@ -632,13 +600,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Continue, then touch the card when it requests confirmation for signing."
+            "value" : "Touch the card now to authorize signing. Wait for the operation to finish."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "继续后，请在卡片请求确认签名操作时触摸卡片。"
+            "value" : "请现在触摸卡片以授权签名操作，并等待操作完成。"
           }
         }
       }
@@ -648,13 +616,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Card Touch Confirmation"
+            "value" : "Card Touch Required"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "卡片触摸确认"
+            "value" : "请触摸卡片"
           }
         }
       }

@@ -51,7 +51,6 @@ final class CardInteractionCoordinator: ObservableObject {
 
     private enum PendingInteraction {
         case pin(UUID, CheckedContinuation<String, Error>)
-        case touch(UUID, CheckedContinuation<Void, Error>)
     }
 
     private struct PreparedPin {
@@ -82,7 +81,7 @@ final class CardInteractionCoordinator: ObservableObject {
     nonisolated func requestTouch(slot: CardSlot) throws {
         do {
             try CallbackWait.wait { [self] in
-                try await acknowledgeTouch(slot: slot)
+                try await presentTouchRequirement(slot: slot)
             }
         } catch let error as CardInteractionErrorFfi {
             throw error
@@ -156,14 +155,6 @@ final class CardInteractionCoordinator: ObservableObject {
         continuation.resume(returning: pin)
     }
 
-    func confirmTouch() {
-        guard let request = touchRequest,
-              case .touch(let id, let continuation) = pending,
-              request.id == id else { return }
-        clearPendingInteraction()
-        continuation.resume()
-    }
-
     func cancelActiveInteraction() {
         cancelInteraction(id: nil)
     }
@@ -175,10 +166,6 @@ final class CardInteractionCoordinator: ObservableObject {
         }
         switch pending {
         case .pin(let pendingID, let continuation):
-            guard id == nil || id == pendingID else { return }
-            clearInteraction()
-            continuation.resume(throwing: CardInteractionErrorFfi.Cancelled)
-        case .touch(let pendingID, let continuation):
             guard id == nil || id == pendingID else { return }
             clearInteraction()
             continuation.resume(throwing: CardInteractionErrorFfi.Cancelled)
@@ -263,31 +250,13 @@ final class CardInteractionCoordinator: ObservableObject {
         }
     }
 
-    private func acknowledgeTouch(slot: CardSlot) async throws {
+    private func presentTouchRequirement(slot: CardSlot) throws {
         guard pending == nil else {
             throw CardInteractionErrorFfi.Unavailable
         }
         try checkCancellation()
-        let id = UUID()
-        try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                guard pending == nil else {
-                    continuation.resume(throwing: CardInteractionErrorFfi.Unavailable)
-                    return
-                }
-                guard !Task.isCancelled else {
-                    continuation.resume(throwing: CardInteractionErrorFfi.Cancelled)
-                    return
-                }
-                pending = .touch(id, continuation)
-                isPresentationActive = true
-                touchRequest = CardTouchRequest(id: id, slot: slot)
-            }
-        } onCancel: {
-            Task { @MainActor [weak self] in
-                self?.cancelInteraction(id: id)
-            }
-        }
+        touchRequest = CardTouchRequest(id: UUID(), slot: slot)
+        isPresentationActive = true
     }
 
     private func checkCancellation() throws {

@@ -164,9 +164,8 @@ struct CardPinEntryView: View {
     }
 }
 
-struct CardTouchPromptView: View {
+struct CardTouchProgressView: View {
     let request: CardTouchRequest
-    @ObservedObject var coordinator: CardInteractionCoordinator
 
     var body: some View {
         NavigationStack {
@@ -174,27 +173,16 @@ struct CardTouchPromptView: View {
                 Image(systemName: "hand.point.up.left.fill")
                     .font(.system(size: 44))
                     .accessibilityHidden(true)
+                ProgressView()
                 Text(request.slot.touchMessage)
                     .multilineTextAlignment(.center)
-                Text("card.touch.notVerified")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                Button("card.touch.continue") {
-                    coordinator.confirmTouch()
-                }
-                .buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("card.touch.continue")
-                Button("card.interaction.cancel", role: .cancel) {
-                    coordinator.cancelActiveInteraction()
-                }
-                .accessibilityIdentifier("card.touch.cancel")
             }
             .padding()
             .navigationTitle("card.touch.title")
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium])
+        .interactiveDismissDisabled()
     }
 }
 

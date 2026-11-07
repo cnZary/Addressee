@@ -48,19 +48,20 @@ final class CardInteractionTests: XCTestCase {
         XCTAssertNil(coordinator.pinRequest)
     }
 
-    func testTouchPromptIsAnAcknowledgementNotAHardwareResult() async throws {
+    func testTouchNotificationDoesNotBlockTheCardOperation() async throws {
         let coordinator = CardInteractionCoordinator()
         defer { coordinator.cancelActiveInteraction() }
+        let returned = expectation(description: "Touch callback returns without confirmation")
         let request = Task.detached {
             try coordinator.requestTouch(slot: .decryption)
+            returned.fulfill()
         }
 
-        let touchRequested = await waitUntil { coordinator.touchRequest != nil }
-        XCTAssertTrue(touchRequested)
-        XCTAssertEqual(coordinator.touchRequest?.slot, .decryption)
-        coordinator.confirmTouch()
+        await fulfillment(of: [returned], timeout: 2)
         try await request.value
-        XCTAssertNil(coordinator.touchRequest)
+        XCTAssertEqual(coordinator.touchRequest?.slot, .decryption)
+        XCTAssertTrue(coordinator.isPresentationActive)
+        XCTAssertNil(coordinator.pinRequest)
     }
 
     func testPreparedNFCPinSurvivesSheetDismissalAndIsConsumedOnce() async throws {
@@ -211,10 +212,9 @@ final class CardInteractionTests: XCTestCase {
         try await Task.sleep(nanoseconds: 250_000_000)
         XCTAssertNotNil(coordinator.touchRequest)
         XCTAssertNotNil(host.presentedViewController)
-        coordinator.confirmTouch()
         try await operation.value
         XCTAssertNil(coordinator.pinRequest)
-        XCTAssertNil(coordinator.touchRequest)
+        XCTAssertNotNil(coordinator.touchRequest)
         XCTAssertTrue(coordinator.isPresentationActive)
         coordinator.cancelActiveInteraction()
         let sheetDismissed = await waitUntil { host.presentedViewController == nil }

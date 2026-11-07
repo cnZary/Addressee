@@ -1091,9 +1091,6 @@ final class AppleSmartCardDeviceTests: XCTestCase {
                     interaction.pin = pin
                     interaction.submitPin()
                 }
-                if interaction.touchRequest != nil {
-                    interaction.confirmTouch()
-                }
                 await Task.yield()
             }
         }
