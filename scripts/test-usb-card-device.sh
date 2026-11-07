@@ -20,15 +20,17 @@ fi
 CARD_USB_OPERATION="${CARD_USB_OPERATION:-association}"
 case "$CARD_USB_OPERATION" in
     association|management) ;;
-    signing|multi-card-signing|attached-signing|cleartext-signing|decryption)
+    signing|multi-card-signing|attached-signing|touch-attached-signing|cleartext-signing|decryption)
         python3 - <<'PY'
 import os
 if not 0 < len(os.environ.get("CARD_TEST_PIN", "").encode()) <= 128:
     raise SystemExit("CARD_TEST_PIN must be supplied separately for the authorized test card")
+if os.environ.get("CARD_USB_OPERATION") == "touch-attached-signing" and not 0 < len(os.environ.get("CARD_TEST_ADMIN_PIN", "").encode()) <= 128:
+    raise SystemExit("CARD_TEST_ADMIN_PIN must be supplied separately for the authorized CanoKey touch test")
 PY
         ;;
     *)
-        echo "CARD_USB_OPERATION must be association, management, signing, multi-card-signing, attached-signing, cleartext-signing, or decryption." >&2
+        echo "CARD_USB_OPERATION must be association, management, signing, multi-card-signing, attached-signing, touch-attached-signing, cleartext-signing, or decryption." >&2
         exit 2
         ;;
 esac
@@ -130,6 +132,7 @@ for target in EnvironmentVariables TestingEnvironmentVariables; do
 done
 plutil -replace AddresseeTests.CommandLineArguments -json '[]' "$TEST_RUN"
 TEST_ID='AppleSmartCardDeviceTests/testUSBAssociationAndCleanClose()'
+REPORT_OPERATION="$CARD_USB_OPERATION"
 case "$CARD_USB_OPERATION" in
     management)
         TEST_ID='AppleSmartCardDeviceTests/testUSBStandaloneManagementReadOnly()'
@@ -143,6 +146,10 @@ case "$CARD_USB_OPERATION" in
     attached-signing)
         TEST_ID='AppleSmartCardDeviceTests/testUSBPrivateKeyAttachedSigning()'
         ;;
+    touch-attached-signing)
+        TEST_ID='AppleSmartCardDeviceTests/testUSBPrivateKeyAttachedSigningWithTouch()'
+        REPORT_OPERATION='attached-signing'
+        ;;
     cleartext-signing)
         TEST_ID='AppleSmartCardDeviceTests/testUSBPrivateKeyCleartextSigning()'
         ;;
@@ -154,7 +161,7 @@ if [[ "$CARD_USB_OPERATION" != association && "$CARD_USB_OPERATION" != managemen
     for target in EnvironmentVariables TestingEnvironmentVariables; do
         plutil -replace "AddresseeTests.$target.ADDRESSEE_CARD_USB_PRIVATE_KEY_TESTS" -string 1 "$TEST_RUN"
     done
-    python3 - "$TEST_RUN" <<'PY'
+    python3 - "$TEST_RUN" "$CARD_USB_OPERATION" <<'PY'
 import os
 import plistlib
 from pathlib import Path
@@ -165,10 +172,13 @@ with path.open("rb") as stream:
     document = plistlib.load(stream)
 for target in ("EnvironmentVariables", "TestingEnvironmentVariables"):
     document["AddresseeTests"][target]["ADDRESSEE_CARD_TEST_PIN"] = os.environ["CARD_TEST_PIN"]
+    if sys.argv[2] == "touch-attached-signing":
+        document["AddresseeTests"][target]["ADDRESSEE_CARD_TEST_ADMIN_PIN"] = os.environ["CARD_TEST_ADMIN_PIN"]
+        document["AddresseeTests"][target]["ADDRESSEE_CARD_USB_TOUCH_TESTS"] = "1"
 with path.open("wb") as stream:
     plistlib.dump(document, stream, sort_keys=False)
 PY
-    trap 'for target in EnvironmentVariables TestingEnvironmentVariables; do plutil -remove "AddresseeTests.$target.ADDRESSEE_CARD_TEST_PIN" "$TEST_RUN" >/dev/null 2>&1 || true; done' EXIT
+    trap 'for target in EnvironmentVariables TestingEnvironmentVariables; do for key in ADDRESSEE_CARD_TEST_PIN ADDRESSEE_CARD_TEST_ADMIN_PIN; do plutil -remove "AddresseeTests.$target.$key" "$TEST_RUN" >/dev/null 2>&1 || true; done; plutil -remove "AddresseeTests.$target.ADDRESSEE_CARD_USB_TOUCH_TESTS" "$TEST_RUN" >/dev/null 2>&1 || true; done' EXIT
 fi
 if [[ "$CARD_USB_PEER_INPUT" == gpg ]]; then
     for target in EnvironmentVariables TestingEnvironmentVariables; do
@@ -210,7 +220,7 @@ xcrun xcresulttool export attachments \
     --path "$RESULT_BUNDLE" \
     --test-id "$TEST_ID" \
     --output-path "$OUTPUT"
-python3 - "$OUTPUT" "$CARD_READER_NAME" "$TEST_ID" "$CARD_USB_OPERATION" "$CARD_USB_PEER_INPUT" "${CARD_USB_GPG_MESSAGE:-}" "${CARD_USB_GPG_PLAINTEXT:-}" <<'PY'
+python3 - "$OUTPUT" "$CARD_READER_NAME" "$TEST_ID" "$CARD_USB_OPERATION" "$CARD_USB_PEER_INPUT" "${CARD_USB_GPG_MESSAGE:-}" "${CARD_USB_GPG_PLAINTEXT:-}" "$REPORT_OPERATION" <<'PY'
 import json
 from pathlib import Path
 import shutil
@@ -221,6 +231,7 @@ reader_name = sys.argv[2]
 test_id = sys.argv[3]
 operation = sys.argv[4]
 peer_input = sys.argv[5]
+report_operation = sys.argv[8]
 manifest = json.loads((output / "manifest.json").read_text())
 selected = []
 for suite in manifest:
@@ -228,7 +239,7 @@ for suite in manifest:
         continue
     for attachment in suite.get("attachments", []):
         name = attachment.get("suggestedHumanReadableName", "")
-        if name.startswith(f"usb-{operation}-result_0_"):
+        if name.startswith(f"usb-{report_operation}-result_0_"):
             selected.append(attachment)
 if len(selected) != 1:
     raise SystemExit("The physical test must export exactly one selected USB observation")
@@ -263,7 +274,7 @@ elif operation == "management":
     }
 else:
     expected = {
-        "operation": operation,
+        "operation": report_operation,
         "messageSource": peer_input,
         "associationRestored": True,
         "associatedCardCount": 2 if operation == "multi-card-signing" else 1,
@@ -294,6 +305,10 @@ if operation not in ("association", "management") and (
     not isinstance(report.get("componentFingerprint"), str) or not report["componentFingerprint"]
 ):
     raise SystemExit("The selected USB component fingerprint is missing")
+if report_operation == "attached-signing" and type(report.get("touchNotificationObserved")) is not bool:
+    raise SystemExit("The attached-signing touch observation is missing")
+if operation == "touch-attached-signing" and report.get("touchNotificationObserved") is not True:
+    raise SystemExit("The card did not request the required physical touch")
 if operation == "management":
     matches = report.get("matchingPublicComponents")
     if not isinstance(matches, list) or any(
@@ -302,7 +317,7 @@ if operation == "management":
         for value in matches
     ):
         raise SystemExit("The standalone management public-key matches are invalid")
-shutil.copyfile(source, output / f"usb-{operation}-result.json")
+shutil.copyfile(source, output / f"usb-{report_operation}-result.json")
 
 def export_attachment(prefix, name, maximum):
     matches = []
@@ -326,12 +341,36 @@ if operation in ("signing", "multi-card-signing"):
     export_attachment("usb-signing-signature_0_", "signature.sig", 1024 * 1024)
     if payload.read_bytes() != b"Physical USB short signing session":
         raise SystemExit("The exported USB signing payload does not match the test input")
-if operation == "attached-signing":
+if operation in ("attached-signing", "touch-attached-signing"):
     payload = export_attachment("usb-attached-signing-payload_0_", "payload.bin", 1024 * 1024)
     export_attachment("usb-attached-signing-message_0_", "attached-message.pgp", 16 * 1024 * 1024)
     export_attachment("usb-attached-signing-tampered_0_", "tampered-attached-message.pgp", 16 * 1024 * 1024)
     if payload.read_bytes() != b"Physical USB attached signing\0\r\nSecond line":
         raise SystemExit("The exported USB attached-signature payload does not match the test input")
+if operation == "touch-attached-signing":
+    policy_path = export_attachment("usb-touch-policy-result_0_", "touch-policy-result.json", 64 * 1024)
+    policy = json.loads(policy_path.read_text())
+    policy_expected = {
+        "schemaVersion": 1,
+        "transport": "usb",
+        "operation": "touch-policy",
+        "readerName": reader_name,
+        "slot": "signing",
+        "temporaryPolicy": "On",
+        "restored": True,
+        "transportFailureCount": 0,
+        "privateKeyMaterialExported": False,
+    }
+    for key, value in policy_expected.items():
+        if policy.get(key) != value or type(policy.get(key)) is not type(value):
+            raise SystemExit(f"Invalid touch-policy observation: {key}")
+    original = policy.get("originalPolicy")
+    if original not in ("Off", "On"):
+        raise SystemExit("The original touch policy is not supported by this reversible test")
+    for key in ("cardConfigurationWritten", "adminPinSupplied", "restorationRequired"):
+        expected_value = original == "Off"
+        if policy.get(key) is not expected_value:
+            raise SystemExit(f"Invalid touch-policy observation: {key}")
 if operation == "cleartext-signing":
     payload = export_attachment("usb-cleartext-signing-payload_0_", "payload.txt", 1024 * 1024)
     export_attachment("usb-cleartext-signing-message_0_", "cleartext-message.asc", 16 * 1024 * 1024)
@@ -353,7 +392,7 @@ else:
     print(f"Only the selected USB {operation} workflow and its public setup and closure passed.")
 PY
 
-if [[ "$CARD_USB_OPERATION" == attached-signing ]]; then
+if [[ "$CARD_USB_OPERATION" == attached-signing || "$CARD_USB_OPERATION" == touch-attached-signing ]]; then
     python3 "$ROOT_DIR/scripts/verify-usb-attached-signature.py" "$CARD_USB_FIXTURE" "$OUTPUT"
 fi
 if [[ "$CARD_USB_OPERATION" == cleartext-signing ]]; then

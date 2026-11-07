@@ -72,7 +72,15 @@ private struct ObservedCardTransportOpening: CardTransportOpening {
 }
 
 @MainActor
+private final class CardTouchTestState {
+    var notificationObserved = false
+    var policyMayNeedRestore = false
+}
+
+@MainActor
 final class AppleSmartCardDeviceTests: XCTestCase {
+    private let touchState = CardTouchTestState()
+
     func testReadOnlyTransportAvailability() async throws {
         guard ProcessInfo.processInfo.environment["ADDRESSEE_CARD_API_TESTS"] == "1" else {
             throw XCTSkip("Physical Apple smart card API probes require explicit opt-in")
@@ -285,6 +293,7 @@ final class AppleSmartCardDeviceTests: XCTestCase {
             "readerName": readerName,
             "certificateFingerprint": imported.summary.fingerprint,
             "cardIdentity": information.identity.displayIdentifier,
+            "signingTouchPolicy": information.slots.first(where: { $0.slot == .signing })?.touchPolicy ?? "Unavailable",
             "matchingPublicComponents": matchingComponents,
             "associationRequired": false,
             "associationCreated": false,
@@ -353,6 +362,10 @@ final class AppleSmartCardDeviceTests: XCTestCase {
         try await runUSBPrivateKeyTest(workflow: .attachedSigning)
     }
 
+    func testUSBPrivateKeyAttachedSigningWithTouch() async throws {
+        try await runUSBPrivateKeyAttachedSigningWithTouch()
+    }
+
     func testUSBPrivateKeyCleartextSigning() async throws {
         try await runUSBPrivateKeyTest(workflow: .cleartextSigning)
     }
@@ -363,7 +376,8 @@ final class AppleSmartCardDeviceTests: XCTestCase {
 
     private func runUSBPrivateKeyTest(
         workflow: USBPrivateKeyWorkflow,
-        includePriorCardAssociation: Bool = false
+        includePriorCardAssociation: Bool = false,
+        requireTouch: Bool = false
     ) async throws {
         let environment = ProcessInfo.processInfo.environment
         guard environment["ADDRESSEE_CARD_USB_PRIVATE_KEY_TESTS"] == "1" else {
@@ -566,7 +580,8 @@ final class AppleSmartCardDeviceTests: XCTestCase {
             let payload = Data("Physical USB attached signing\0\r\nSecond line".utf8)
             let signature = try await Self.respondToCardInteractions(
                 interaction: restoredInteraction,
-                pin: pin
+                pin: pin,
+                onTouch: { [touchState] in touchState.notificationObserved = true }
             ) {
                 try await restored.signAttached(
                     signingKey: fingerprint,
@@ -578,6 +593,9 @@ final class AppleSmartCardDeviceTests: XCTestCase {
                 )
             }
             XCTAssertEqual(signature.metadata.signerFingerprint, componentFingerprint)
+            if requireTouch {
+                XCTAssertTrue(touchState.notificationObserved, "The card must request physical touch")
+            }
             let verification = try await restored.verifyAttached(
                 input: signature.artifact,
                 atUnixSeconds: at
@@ -701,7 +719,7 @@ final class AppleSmartCardDeviceTests: XCTestCase {
         XCTAssertEqual(observed.closed, 3)
         XCTAssertEqual(observed.successfulCloses, 3)
         XCTAssertEqual(observed.failures, 0)
-        let report: [String: Any] = [
+        var report: [String: Any] = [
             "schemaVersion": 1,
             "transport": "usb",
             "operation": operationName,
@@ -724,11 +742,180 @@ final class AppleSmartCardDeviceTests: XCTestCase {
             "cardConfigurationWritten": false,
             "privateKeyMaterialExported": false,
         ]
+        if case .attachedSigning = workflow {
+            report["touchNotificationObserved"] = touchState.notificationObserved
+        }
         let attachment = XCTAttachment(
             data: try JSONSerialization.data(withJSONObject: report, options: [.sortedKeys]),
             uniformTypeIdentifier: "public.json"
         )
         attachment.name = "usb-\(operationName)-result.json"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        #endif
+    }
+
+    private func runUSBPrivateKeyAttachedSigningWithTouch() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["ADDRESSEE_CARD_USB_PRIVATE_KEY_TESTS"] == "1",
+              environment["ADDRESSEE_CARD_USB_TOUCH_TESTS"] == "1" else {
+            throw XCTSkip("Physical USB touch-policy tests require separate explicit opt-in")
+        }
+        #if targetEnvironment(simulator)
+        throw XCTSkip("This test requires the explicitly authorized physical CanoKey")
+        #else
+        let fixture = try Self.cardFixture(environment: environment, key: "ADDRESSEE_CARD_USB_FIXTURE")
+        guard fixture.identity.manufacturer == 0xF1D0,
+              fixture.identity.serial == 0x00989ADF,
+              let readerName = environment["ADDRESSEE_CARD_READER_NAME"],
+              readerName == "canokeys.org CanoKey Canary",
+              let adminPin = environment["ADDRESSEE_CARD_TEST_ADMIN_PIN"],
+              !adminPin.isEmpty, adminPin.utf8.count <= 128 else {
+            throw CardDeviceTestError.invalidTestConfiguration
+        }
+        let readers = try await CardTransportFactory().readerNames()
+        guard readers == [readerName] else {
+            XCTFail("Touch-policy testing requires exactly one explicitly identified CanoKey reader")
+            return
+        }
+        let connection = CardConnectionSelection(method: .usb, readerName: readerName)
+        let interaction = CardInteractionCoordinator()
+        let observation = CardTransportObservation()
+        let manager = CardSessionManager(
+            engine: OpenPgpEngine(),
+            interaction: interaction,
+            transports: ObservedCardTransportOpening(observation: observation),
+            store: .inMemory()
+        )
+        let model = OpenPgpApplicationModel(
+            engine: OpenPgpEngine(),
+            cardInteraction: interaction,
+            cardSessions: manager
+        )
+        await model.load()
+        XCTAssertNil(model.errorMessage)
+        let touchState = touchState
+        touchState.policyMayNeedRestore = false
+
+        let initial = try await model.inspectHardware(
+            identity: fixture.identity.ffi(),
+            connection: connection
+        )
+        guard initial.identity == fixture.identity.ffi(),
+              let signing = initial.slots.first(where: { $0.slot == .signing }),
+              signing.fingerprint == fixture.signingComponent,
+              let originalPolicy = signing.touchPolicy,
+              originalPolicy == "Off" || originalPolicy == "On",
+              initial.adminPinRetries >= 2,
+              (8...Int(initial.adminPinMaxLength)).contains(adminPin.utf8.count) else {
+            throw CardDeviceTestError.invalidTestConfiguration
+        }
+
+        let restorePolicy: @MainActor () async throws -> Void = { [touchState] in
+            let current = try await model.inspectHardware(
+                identity: fixture.identity.ffi(),
+                connection: connection
+            )
+            guard let slot = current.slots.first(where: { $0.slot == .signing }),
+                  let policy = slot.touchPolicy else {
+                throw CardDeviceTestError.invalidTestConfiguration
+            }
+            if policy == originalPolicy {
+                touchState.policyMayNeedRestore = false
+                return
+            }
+            guard originalPolicy == "Off" else {
+                throw CardDeviceTestError.invalidTestConfiguration
+            }
+            try await manager.withUnboundCardManagementSession(
+                expectedIdentity: fixture.identity.ffi(),
+                connection: connection,
+                purpose: .inspection
+            ) { session in
+                try session.setTouchPolicy(slot: .signing, policy: .off, adminPin: adminPin)
+                let restored = try session.inspect()
+                guard restored.slots.first(where: { $0.slot == .signing })?.touchPolicy == originalPolicy else {
+                    throw CardDeviceTestError.invalidTestConfiguration
+                }
+                await MainActor.run {
+                    touchState.policyMayNeedRestore = false
+                }
+            }
+        }
+        addTeardownBlock { @MainActor in
+            if touchState.policyMayNeedRestore {
+                do {
+                    try await restorePolicy()
+                } catch {
+                    XCTFail("Failed to restore the original CanoKey signing touch policy")
+                }
+            }
+            interaction.cancelActiveInteraction()
+        }
+
+        if originalPolicy == "Off" {
+            let enabled = try await manager.withUnboundCardManagementSession(
+                expectedIdentity: fixture.identity.ffi(),
+                connection: connection,
+                purpose: .inspection
+            ) { session in
+                try session.setTouchPolicy(slot: .signing, policy: .on, adminPin: adminPin)
+                await MainActor.run {
+                    touchState.policyMayNeedRestore = true
+                }
+                return try session.inspect()
+            }
+            guard enabled.slots.first(where: { $0.slot == .signing })?.touchPolicy == "On" else {
+                throw CardDeviceTestError.invalidTestConfiguration
+            }
+        }
+
+        var signingError: Error?
+        do {
+            try await runUSBPrivateKeyTest(workflow: .attachedSigning, requireTouch: true)
+        } catch {
+            signingError = error
+        }
+        if touchState.policyMayNeedRestore {
+            do {
+                try await restorePolicy()
+            } catch {
+                if signingError != nil {
+                    XCTFail("Touch-policy restoration also failed after the signing error")
+                }
+                throw error
+            }
+        }
+        if let signingError {
+            throw signingError
+        }
+        XCTAssertFalse(touchState.policyMayNeedRestore)
+
+        let observed = await observation.snapshot()
+        let report: [String: Any] = [
+            "schemaVersion": 1,
+            "transport": "usb",
+            "operation": "touch-policy",
+            "readerName": readerName,
+            "cardIdentity": fixture.identity.ffi().displayIdentifier,
+            "slot": "signing",
+            "originalPolicy": originalPolicy,
+            "temporaryPolicy": "On",
+            "cardConfigurationWritten": originalPolicy == "Off",
+            "adminPinSupplied": originalPolicy == "Off",
+            "restorationRequired": originalPolicy == "Off",
+            "restored": !touchState.policyMayNeedRestore,
+            "transportOpenCount": observed.opened,
+            "transportCloseCompletionCount": observed.closed,
+            "successfulTransportCloseCompletionCount": observed.successfulCloses,
+            "transportFailureCount": observed.failures,
+            "privateKeyMaterialExported": false,
+        ]
+        let attachment = XCTAttachment(
+            data: try JSONSerialization.data(withJSONObject: report, options: [.sortedKeys]),
+            uniformTypeIdentifier: "public.json"
+        )
+        attachment.name = "usb-touch-policy-result.json"
         attachment.lifetime = .keepAlways
         add(attachment)
         #endif
@@ -1083,13 +1270,19 @@ final class AppleSmartCardDeviceTests: XCTestCase {
     private static func respondToCardInteractions<T: Sendable>(
         interaction: CardInteractionCoordinator,
         pin: String,
+        onTouch: @escaping @MainActor @Sendable () -> Void = {},
         operation: @escaping @MainActor @Sendable () async throws -> T
     ) async throws -> T {
         let responses = Task { @MainActor in
+            var touchNotificationPublished = false
             while !Task.isCancelled {
                 if interaction.pinRequest != nil {
                     interaction.pin = pin
                     interaction.submitPin()
+                }
+                if interaction.touchRequest != nil && !touchNotificationPublished {
+                    touchNotificationPublished = true
+                    onTouch()
                 }
                 await Task.yield()
             }
